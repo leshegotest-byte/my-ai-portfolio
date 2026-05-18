@@ -204,34 +204,54 @@ function Index() {
 
         {/* Investments */}
         <section>
-          <h3 className="text-xl font-bold mb-3">Your investments</h3>
-          <div className="space-y-3">
-            {investments.map((it) => {
-              const positive = it.pct > 0;
-              const neutral = it.pct === 0;
-              return (
-                <div key={it.name} className="bg-card rounded-2xl p-5">
-                  <p className="font-semibold">{it.name}</p>
-                  <div className="grid grid-cols-2 mt-4">
-                    <div>
-                      <p className="text-xs text-muted-foreground">Current Value</p>
-                      <p className="font-bold mt-1">{it.value}</p>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-xl font-bold">Your investments</h3>
+            <Link to="/invest" className="text-sm text-primary font-medium hover:underline">Browse +</Link>
+          </div>
+
+          {loadingP ? (
+            <div className="bg-card rounded-2xl p-6 text-center text-sm text-muted-foreground">Loading…</div>
+          ) : purchases.length === 0 ? (
+            <Link to="/invest" className="block bg-card rounded-2xl p-6 text-center border border-dashed border-border hover:border-primary transition">
+              <Wallet className="size-6 text-primary mx-auto mb-2" />
+              <p className="font-semibold">No investments yet</p>
+              <p className="text-sm text-muted-foreground mt-1">Browse instruments and make your first purchase</p>
+            </Link>
+          ) : (
+            <div className="space-y-3">
+              {purchases.map((p) => {
+                const projected = Number(p.amount) * (1 + Number(p.instruments?.expected_return ?? 0) / 100);
+                const pl = projected - Number(p.amount);
+                const positive = pl >= 0;
+                return (
+                  <div key={p.id} className="bg-card rounded-2xl p-5">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-semibold">{p.instruments?.name ?? "Investment"}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">{p.instruments?.category}</p>
+                      </div>
+                      <p className="text-xs text-muted-foreground">{new Date(p.created_at).toLocaleDateString()}</p>
                     </div>
-                    <div className="text-right">
-                      <p className="text-xs text-muted-foreground">Profit &amp; Loss Value</p>
-                      <p className="font-bold mt-1">
-                        <span className={cn(neutral ? "text-foreground" : positive ? "text-primary" : "text-destructive")}>
-                          {neutral ? "0%" : `${positive ? "+" : ""}${it.pct}%`}
-                        </span>
-                        <span className="text-muted-foreground"> | </span>
-                        <span>{it.pl}</span>
-                      </p>
+                    <div className="grid grid-cols-2 mt-4">
+                      <div>
+                        <p className="text-xs text-muted-foreground">Invested</p>
+                        <p className="font-bold mt-1">R{Number(p.amount).toLocaleString()}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">{Number(p.units).toFixed(4)} units</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs text-muted-foreground">Projected P&amp;L</p>
+                        <p className="font-bold mt-1">
+                          <span className={cn(positive ? "text-primary" : "text-destructive")}>
+                            {positive ? "+" : ""}R{Math.round(pl).toLocaleString()}
+                          </span>
+                        </p>
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </section>
       </div>
     </div>
