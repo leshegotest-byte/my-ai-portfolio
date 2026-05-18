@@ -14,7 +14,101 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      instruments: {
+        Row: {
+          category: string
+          created_at: string
+          description: string
+          expected_return: number
+          id: string
+          name: string
+          price: number
+          risk_level: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          description: string
+          expected_return: number
+          id?: string
+          name: string
+          price: number
+          risk_level: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          description?: string
+          expected_return?: number
+          id?: string
+          name?: string
+          price?: number
+          risk_level?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          display_name: string | null
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          id: string
+          updated_at?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      purchases: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          instrument_id: string
+          status: string
+          units: number
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          id?: string
+          instrument_id: string
+          status?: string
+          units: number
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          instrument_id?: string
+          status?: string
+          units?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "purchases_instrument_id_fkey"
+            columns: ["instrument_id"]
+            isOneToOne: false
+            referencedRelation: "instruments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
