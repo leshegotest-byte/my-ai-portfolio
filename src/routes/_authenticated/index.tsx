@@ -1,8 +1,10 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { ArrowLeft, MoreHorizontal, RefreshCw, ArrowUp, ArrowDown, Sparkles, TrendingUp, Bot, Send } from "lucide-react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { ArrowUp, Sparkles, TrendingUp, Bot, Send, LogOut, Plus, Wallet } from "lucide-react";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/")({
   head: () => ({
