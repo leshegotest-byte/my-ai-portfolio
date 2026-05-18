@@ -35,12 +35,13 @@ function gen(n: number, start: number, vol: number) {
 }
 
 const investments = [
-  { name: "Portfolio Investment", value: "R100 000", pct: 2, pl: "R2 000" },
-  { name: "Unit Trusts", value: "R80 000", pct: -2, pl: "-R1 500" },
-  { name: "ETFs", value: "R0", pct: 0, pl: "R0" },
-  { name: "Equities", value: "R25 000", pct: 15, pl: "R5 500" },
-  { name: "Crypto Assets", value: "R16 500", pct: 65, pl: "R6 500" },
-];
+type Purchase = {
+  id: string;
+  amount: number;
+  units: number;
+  created_at: string;
+  instruments: { name: string; category: string; expected_return: number } | null;
+};
 
 const aiInsights = [
   { title: "Rebalance opportunity", body: "Your Crypto allocation is up 65%. Consider taking partial profits to rebalance toward Unit Trusts which are underweight." },
