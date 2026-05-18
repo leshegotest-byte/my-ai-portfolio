@@ -34,7 +34,6 @@ function gen(n: number, start: number, vol: number) {
   });
 }
 
-const investments = [
 type Purchase = {
   id: string;
   amount: number;
