@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "VodaInvest — AI-Powered Portfolio" },
+      { title: "SmartInVest — AI-Powered Portfolio" },
       { name: "description", content: "Track investments and get AI insights on your portfolio performance." },
     ],
   }),
@@ -59,7 +59,7 @@ function Index() {
             <button className="rounded-full p-2 hover:bg-secondary transition" aria-label="Back">
               <ArrowLeft className="size-5" />
             </button>
-            <h1 className="text-lg font-semibold">VodaInvest</h1>
+            <h1 className="text-lg font-semibold">SmartInVest</h1>
             <div className="flex items-center gap-1 bg-secondary rounded-full px-1 py-1">
               <button className="p-1.5 rounded-full hover:bg-muted" aria-label="More"><MoreHorizontal className="size-4" /></button>
               <div className="w-px h-4 bg-border" />
@@ -91,7 +91,7 @@ function Index() {
       <div className="mx-auto max-w-xl px-5 -mt-6 space-y-5">
         {/* Chart card */}
         <section className="bg-card rounded-3xl p-5 shadow-[var(--shadow-glow)]">
-          <h3 className="font-semibold">VodaInvest Value Over Time</h3>
+          <h3 className="font-semibold">SmartInVest Value Over Time</h3>
           <div className="mt-4 grid grid-cols-2 divide-x divide-border">
             <div className="pr-4">
               <p className="text-xs text-muted-foreground">1 m change</p>
