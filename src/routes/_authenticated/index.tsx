@@ -1,10 +1,12 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { ArrowLeft, MoreHorizontal, RefreshCw, ArrowUp, ArrowDown, Sparkles, TrendingUp, Bot, Send } from "lucide-react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { ArrowUp, Sparkles, TrendingUp, Bot, Send, LogOut, Plus, Wallet } from "lucide-react";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
-export const Route = createFileRoute("/")({
+export const Route = createFileRoute("/_authenticated/")({
   head: () => ({
     meta: [
       { title: "SmartInVest — AI-Powered Portfolio" },
@@ -32,13 +34,13 @@ function gen(n: number, start: number, vol: number) {
   });
 }
 
-const investments = [
-  { name: "Portfolio Investment", value: "R100 000", pct: 2, pl: "R2 000" },
-  { name: "Unit Trusts", value: "R80 000", pct: -2, pl: "-R1 500" },
-  { name: "ETFs", value: "R0", pct: 0, pl: "R0" },
-  { name: "Equities", value: "R25 000", pct: 15, pl: "R5 500" },
-  { name: "Crypto Assets", value: "R16 500", pct: 65, pl: "R6 500" },
-];
+type Purchase = {
+  id: string;
+  amount: number;
+  units: number;
+  created_at: string;
+  instruments: { name: string; category: string; expected_return: number } | null;
+};
 
 const aiInsights = [
   { title: "Rebalance opportunity", body: "Your Crypto allocation is up 65%. Consider taking partial profits to rebalance toward Unit Trusts which are underweight." },
@@ -49,6 +51,32 @@ const aiInsights = [
 function Index() {
   const [range, setRange] = useState<Range>("1m");
   const data = useMemo(() => seriesByRange[range], [range]);
+  const [purchases, setPurchases] = useState<Purchase[]>([]);
+  const [loadingP, setLoadingP] = useState(true);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    (async () => {
+      const { data, error } = await supabase
+        .from("purchases")
+        .select("id, amount, units, created_at, instruments(name, category, expected_return)")
+        .order("created_at", { ascending: false });
+      if (!error && data) setPurchases(data as unknown as Purchase[]);
+      setLoadingP(false);
+    })();
+  }, []);
+
+  const totalInvested = purchases.reduce((s, p) => s + Number(p.amount), 0);
+  const baseValue = 221500;
+  const totalValue = baseValue + totalInvested;
+  const plValue = 80500 + totalInvested * 0.05;
+  const plPct = totalValue > 0 ? ((plValue / (totalValue - plValue)) * 100).toFixed(1) : "0";
+
+  const logout = async () => {
+    await supabase.auth.signOut();
+    toast.success("Signed out");
+    navigate({ to: "/login" });
+  };
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-10">
@@ -56,37 +84,43 @@ function Index() {
       <div className="px-5 pt-6 pb-10 bg-[var(--gradient-hero)]">
         <div className="mx-auto max-w-xl">
           <header className="flex items-center justify-between">
-            <button className="rounded-full p-2 hover:bg-secondary transition" aria-label="Back">
-              <ArrowLeft className="size-5" />
-            </button>
-            <h1 className="text-lg font-semibold">SmartInVest</h1>
-            <div className="flex items-center gap-1 bg-secondary rounded-full px-1 py-1">
-              <button className="p-1.5 rounded-full hover:bg-muted" aria-label="More"><MoreHorizontal className="size-4" /></button>
-              <div className="w-px h-4 bg-border" />
-              <button className="p-1.5 rounded-full hover:bg-muted" aria-label="Refresh"><RefreshCw className="size-4" /></button>
+            <div className="flex items-center gap-2">
+              <div className="size-8 rounded-xl bg-primary/15 grid place-items-center">
+                <Sparkles className="size-4 text-primary" />
+              </div>
+              <h1 className="text-lg font-semibold">SmartInVest</h1>
+            </div>
+            <div className="flex items-center gap-2">
+              <Link to="/invest" className="rounded-full bg-primary text-primary-foreground px-3 py-1.5 text-sm font-semibold inline-flex items-center gap-1 hover:opacity-90 transition">
+                <Plus className="size-4" /> Invest
+              </Link>
+              <button onClick={logout} className="rounded-full p-2 bg-secondary hover:bg-muted transition" aria-label="Sign out">
+                <LogOut className="size-4" />
+              </button>
             </div>
           </header>
 
           <div className="mt-8 text-center">
             <p className="text-sm text-muted-foreground">Total Value</p>
             <div className="mt-2 flex items-center justify-center gap-2">
-              <h2 className="text-5xl font-bold tracking-tight">R221 500</h2>
-              <ArrowUp className="size-7 text-[oklch(var(--success))] text-primary" />
+              <h2 className="text-5xl font-bold tracking-tight">R{Math.round(totalValue).toLocaleString()}</h2>
+              <ArrowUp className="size-7 text-primary" />
             </div>
           </div>
 
           <div className="mt-8 grid grid-cols-2 divide-x divide-border">
             <div className="pr-4">
               <p className="text-xs text-muted-foreground">Profit &amp; Loss</p>
-              <p className="text-xl font-bold mt-1">65<span className="text-sm">%</span></p>
+              <p className="text-xl font-bold mt-1">{plPct}<span className="text-sm">%</span></p>
             </div>
             <div className="pl-4 text-right">
               <p className="text-xs text-muted-foreground">Profit &amp; Loss Value</p>
-              <p className="text-xl font-bold mt-1">R80 500</p>
+              <p className="text-xl font-bold mt-1">R{Math.round(plValue).toLocaleString()}</p>
             </div>
           </div>
         </div>
       </div>
+
 
       <div className="mx-auto max-w-xl px-5 -mt-6 space-y-5">
         {/* Chart card */}
@@ -170,34 +204,54 @@ function Index() {
 
         {/* Investments */}
         <section>
-          <h3 className="text-xl font-bold mb-3">Your investments</h3>
-          <div className="space-y-3">
-            {investments.map((it) => {
-              const positive = it.pct > 0;
-              const neutral = it.pct === 0;
-              return (
-                <div key={it.name} className="bg-card rounded-2xl p-5">
-                  <p className="font-semibold">{it.name}</p>
-                  <div className="grid grid-cols-2 mt-4">
-                    <div>
-                      <p className="text-xs text-muted-foreground">Current Value</p>
-                      <p className="font-bold mt-1">{it.value}</p>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-xl font-bold">Your investments</h3>
+            <Link to="/invest" className="text-sm text-primary font-medium hover:underline">Browse +</Link>
+          </div>
+
+          {loadingP ? (
+            <div className="bg-card rounded-2xl p-6 text-center text-sm text-muted-foreground">Loading…</div>
+          ) : purchases.length === 0 ? (
+            <Link to="/invest" className="block bg-card rounded-2xl p-6 text-center border border-dashed border-border hover:border-primary transition">
+              <Wallet className="size-6 text-primary mx-auto mb-2" />
+              <p className="font-semibold">No investments yet</p>
+              <p className="text-sm text-muted-foreground mt-1">Browse instruments and make your first purchase</p>
+            </Link>
+          ) : (
+            <div className="space-y-3">
+              {purchases.map((p) => {
+                const projected = Number(p.amount) * (1 + Number(p.instruments?.expected_return ?? 0) / 100);
+                const pl = projected - Number(p.amount);
+                const positive = pl >= 0;
+                return (
+                  <div key={p.id} className="bg-card rounded-2xl p-5">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-semibold">{p.instruments?.name ?? "Investment"}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">{p.instruments?.category}</p>
+                      </div>
+                      <p className="text-xs text-muted-foreground">{new Date(p.created_at).toLocaleDateString()}</p>
                     </div>
-                    <div className="text-right">
-                      <p className="text-xs text-muted-foreground">Profit &amp; Loss Value</p>
-                      <p className="font-bold mt-1">
-                        <span className={cn(neutral ? "text-foreground" : positive ? "text-primary" : "text-destructive")}>
-                          {neutral ? "0%" : `${positive ? "+" : ""}${it.pct}%`}
-                        </span>
-                        <span className="text-muted-foreground"> | </span>
-                        <span>{it.pl}</span>
-                      </p>
+                    <div className="grid grid-cols-2 mt-4">
+                      <div>
+                        <p className="text-xs text-muted-foreground">Invested</p>
+                        <p className="font-bold mt-1">R{Number(p.amount).toLocaleString()}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">{Number(p.units).toFixed(4)} units</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs text-muted-foreground">Projected P&amp;L</p>
+                        <p className="font-bold mt-1">
+                          <span className={cn(positive ? "text-primary" : "text-destructive")}>
+                            {positive ? "+" : ""}R{Math.round(pl).toLocaleString()}
+                          </span>
+                        </p>
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </section>
       </div>
     </div>
