@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as ConsentRouteImport } from './routes/consent'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 import { Route as AuthenticatedInvestRouteImport } from './routes/_authenticated/invest'
@@ -17,6 +18,11 @@ import { Route as AuthenticatedInvestRouteImport } from './routes/_authenticated
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ConsentRoute = ConsentRouteImport.update({
+  id: '/consent',
+  path: '/consent',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedRoute = AuthenticatedRouteImport.update({
@@ -36,10 +42,12 @@ const AuthenticatedInvestRoute = AuthenticatedInvestRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
+  '/consent': typeof ConsentRoute
   '/login': typeof LoginRoute
   '/invest': typeof AuthenticatedInvestRoute
 }
 export interface FileRoutesByTo {
+  '/consent': typeof ConsentRoute
   '/login': typeof LoginRoute
   '/invest': typeof AuthenticatedInvestRoute
   '/': typeof AuthenticatedIndexRoute
@@ -47,18 +55,20 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_authenticated': typeof AuthenticatedRouteWithChildren
+  '/consent': typeof ConsentRoute
   '/login': typeof LoginRoute
   '/_authenticated/invest': typeof AuthenticatedInvestRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/invest'
+  fullPaths: '/' | '/consent' | '/login' | '/invest'
   fileRoutesByTo: FileRoutesByTo
-  to: '/login' | '/invest' | '/'
+  to: '/consent' | '/login' | '/invest' | '/'
   id:
     | '__root__'
     | '/_authenticated'
+    | '/consent'
     | '/login'
     | '/_authenticated/invest'
     | '/_authenticated/'
@@ -66,6 +76,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
+  ConsentRoute: typeof ConsentRoute
   LoginRoute: typeof LoginRoute
 }
 
@@ -76,6 +87,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/consent': {
+      id: '/consent'
+      path: '/consent'
+      fullPath: '/consent'
+      preLoaderRoute: typeof ConsentRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated': {
@@ -118,8 +136,19 @@ const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
+  ConsentRoute: ConsentRoute,
   LoginRoute: LoginRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
