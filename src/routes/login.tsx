@@ -130,6 +130,34 @@ function LoginPage() {
               {mode === "signin" ? "Sign in" : "Create account"}
             </button>
           </form>
+
+          <div className="flex items-center gap-3 my-5">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-xs text-muted-foreground">or</span>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+
+          <button
+            type="button"
+            disabled={loading}
+            onClick={async () => {
+              setLoading(true);
+              try {
+                const user = await signInWithVodaPay();
+                stashPendingUser(user);
+                toast.success(`Welcome ${user.userName?.firstName ?? user.nickName ?? ""}`);
+                navigate({ to: "/consent", search: { redirect: redirectTo } });
+              } catch (err: any) {
+                toast.error(err.message ?? "VodaPay sign-in failed");
+              } finally {
+                setLoading(false);
+              }
+            }}
+            className="w-full bg-[#e60000] text-white rounded-full py-3 font-semibold hover:opacity-90 transition disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            {loading ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+            Sign in with VodaPay
+          </button>
         </div>
 
         <p className="text-center text-xs text-muted-foreground mt-4">
