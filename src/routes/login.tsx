@@ -4,6 +4,7 @@ import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { Sparkles, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { signInWithVodaPay, stashPendingUser } from "@/lib/vodapay";
 
 export const Route = createFileRoute("/login")({
   validateSearch: (s) => ({ redirect: (s.redirect as string) || "/" }),
