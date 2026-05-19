@@ -73,14 +73,18 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
+      { title: "SmartInVest" },
+      { name: "description", content: "SmartInVest is an AI-powered portfolio application for managing investments." },
       { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { property: "og:title", content: "SmartInVest" },
+      { property: "og:description", content: "SmartInVest is an AI-powered portfolio application for managing investments." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:title", content: "SmartInVest" },
+      { name: "twitter:description", content: "SmartInVest is an AI-powered portfolio application for managing investments." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/b8092208-1d9d-4715-aec2-d1db66d5a78b/id-preview-558da96c--ff9a3ead-0541-4bd7-8619-568d3e174e67.lovable.app-1779204060313.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/b8092208-1d9d-4715-aec2-d1db66d5a78b/id-preview-558da96c--ff9a3ead-0541-4bd7-8619-568d3e174e67.lovable.app-1779204060313.png" },
     ],
     links: [
       {
