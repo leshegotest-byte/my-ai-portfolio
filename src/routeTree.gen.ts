@@ -41,10 +41,10 @@ const AuthenticatedInvestRoute = AuthenticatedInvestRouteImport.update({
 } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof AuthenticatedIndexRoute
   '/consent': typeof ConsentRoute
   '/login': typeof LoginRoute
   '/invest': typeof AuthenticatedInvestRoute
+  '/': typeof AuthenticatedIndexRoute
 }
 export interface FileRoutesByTo {
   '/consent': typeof ConsentRoute
@@ -62,7 +62,7 @@ export interface FileRoutesById {
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/consent' | '/login' | '/invest'
+  fullPaths: '/consent' | '/login' | '/invest' | '/'
   fileRoutesByTo: FileRoutesByTo
   to: '/consent' | '/login' | '/invest' | '/'
   id:
@@ -99,7 +99,7 @@ declare module '@tanstack/react-router' {
     '/_authenticated': {
       id: '/_authenticated'
       path: ''
-      fullPath: '/'
+      fullPath: ''
       preLoaderRoute: typeof AuthenticatedRouteImport
       parentRoute: typeof rootRouteImport
     }
@@ -142,13 +142,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
