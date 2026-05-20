@@ -1,12 +1,11 @@
 import { defineConfig } from "vite";
-import { tanstackStart } from "@tanstack/react-start-plugin";
+import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import tsConfigPaths from "vite-tsconfig-paths";
 
 // Vercel deployment configuration for TanStack Start.
-// The `target: "vercel"` tells Nitro (used internally by TanStack Start)
-// to emit a Vercel-compatible build output under `.vercel/output`.
+// `target: "vercel"` makes Nitro emit a Vercel build output under `.vercel/output`.
 export default defineConfig({
   plugins: [
     tsConfigPaths(),
