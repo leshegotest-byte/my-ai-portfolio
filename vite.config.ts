@@ -11,7 +11,8 @@ export default defineConfig({
   plugins: [
     tsConfigPaths(),
     tailwindcss(),
-    tanstackStart(),
+    // @ts-expect-error - `target` is accepted by the underlying nitro options but not surfaced on the input type
+    tanstackStart({ target: "vercel" }),
     viteReact(),
   ],
   resolve: {
