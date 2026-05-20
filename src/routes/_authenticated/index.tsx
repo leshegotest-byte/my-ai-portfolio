@@ -75,7 +75,7 @@ function Index() {
   const logout = async () => {
     await supabase.auth.signOut();
     toast.success("Signed out");
-    navigate({ to: "/login" });
+    navigate({ to: "/login", search: { redirect: "/" } });
   };
 
   return (
