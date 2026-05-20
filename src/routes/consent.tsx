@@ -33,7 +33,7 @@ function ConsentPage() {
         <div className="text-center space-y-4">
           <p className="text-muted-foreground">No VodaPay session found.</p>
           <button
-            onClick={() => navigate({ to: "/login" })}
+            onClick={() => navigate({ to: "/login", search: { redirect: "/" } })}
             className="bg-primary text-primary-foreground rounded-full px-6 py-2 font-medium"
           >
             Back to sign in
@@ -135,7 +135,7 @@ function ConsentPage() {
             type="button"
             onClick={() => {
               clearPendingUser();
-              navigate({ to: "/login" });
+              navigate({ to: "/login", search: { redirect: "/" } });
             }}
             className="w-full mt-2 text-sm text-muted-foreground hover:text-foreground transition"
           >
