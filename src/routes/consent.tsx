@@ -135,7 +135,7 @@ function ConsentPage() {
             type="button"
             onClick={() => {
               clearPendingUser();
-              navigate({ to: "/login" });
+              navigate({ to: "/login", search: { redirect: "/" } });
             }}
             className="w-full mt-2 text-sm text-muted-foreground hover:text-foreground transition"
           >
