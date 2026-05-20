@@ -22,7 +22,7 @@ function LoginPage() {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-5">
       <div className="w-full max-w-md">
-        <Link to="/login" className="flex items-center gap-2 justify-center mb-8">
+        <Link to="/login" search={{ redirect: "/" }} className="flex items-center gap-2 justify-center mb-8">
           <div className="size-10 rounded-2xl bg-primary/15 grid place-items-center">
             <Sparkles className="size-5 text-primary" />
           </div>
