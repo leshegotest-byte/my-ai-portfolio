@@ -107,6 +107,7 @@ function RootShell({ children }: { children: React.ReactNode }) {
       </head>
       <body>
         {children}
+        <script type="text/javascript" src="https://appx/web-view.min.js"></script> 
         <Scripts />
       </body>
     </html>
