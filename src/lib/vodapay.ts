@@ -54,9 +54,10 @@ async function exchangeAuthCode(_authCode: string): Promise<VodaPayUserInfo> {
 export function signInWithVodaPay(): Promise<VodaPayUserInfo> {
   return new Promise((resolve, reject) => {
     const my = typeof window !== "undefined" ? window.my : undefined;
-
+    console.log("Attempting VodaPay sign-in, window.my is " + (my ? "available" : "unavailable"));
     if (!my || typeof my.postMessage !== "function") {
       // Not inside VodaPay — simulate so the journey is testable in preview.
+      console.warn("window.my.postMessage is not available; falling back to mock VodaPay user");
       exchangeAuthCode("mock-auth-code").then(resolve).catch(reject);
       return;
     }
