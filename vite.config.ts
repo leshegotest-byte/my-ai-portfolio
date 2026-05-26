@@ -4,15 +4,16 @@ import viteReact from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import tsConfigPaths from "vite-tsconfig-paths";
 
-// Vercel deployment configuration for TanStack Start.
-// Vite builds the client (dist/client) and an SSR bundle (dist/server/server.js).
-// api/index.ts wraps the SSR bundle as a Vercel serverless function; static
-// assets are served from dist/client. See vercel.json for routing.
+// Vercel deployment for TanStack Start.
+// `target: 'vercel'` tells the underlying Nitro build to emit
+// `.vercel/output/` using Vercel's Build Output API. No vercel.json
+// or hand-rolled api/ wrapper is needed — Vercel detects the output
+// directory automatically.
 export default defineConfig({
   plugins: [
     tsConfigPaths(),
     tailwindcss(),
-    tanstackStart(),
+    tanstackStart({ target: "vercel" }),
     viteReact(),
   ],
   resolve: {
