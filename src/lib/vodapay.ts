@@ -68,7 +68,8 @@ export function signInWithVodaPay(): Promise<VodaPayUserInfo> {
     my.onMessage = (data: any) => {
       if (data?.action?.type === "AuthCode") {
         clearTimeout(timer);
-        exchangeAuthCode(String(data.action.details ?? "")).then(resolve).catch(reject);
+        window.alert("Received auth code from VodaPay: " + JSON.stringify(data.action.details ?? ""));
+        //exchangeAuthCode(String(data.action.details ?? "")).then(resolve).catch(reject);
       }
     };
 
