@@ -3,17 +3,17 @@ import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import tsConfigPaths from "vite-tsconfig-paths";
+import { nitro } from "nitro/vite";
 
-// Vercel deployment for TanStack Start.
-// `target: 'vercel'` tells the underlying Nitro build to emit
-// `.vercel/output/` using Vercel's Build Output API. No vercel.json
-// or hand-rolled api/ wrapper is needed — Vercel detects the output
-// directory automatically.
+// TanStack Start + Nitro. On Vercel, Nitro auto-detects the environment
+// and emits the Vercel Build Output API directory (.vercel/output/) — no
+// vercel.json or hand-rolled api/ wrapper required.
 export default defineConfig({
   plugins: [
     tsConfigPaths(),
     tailwindcss(),
-    tanstackStart({ target: "vercel" }),
+    tanstackStart(),
+    nitro(),
     viteReact(),
   ],
   resolve: {
