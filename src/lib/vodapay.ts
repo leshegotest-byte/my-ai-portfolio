@@ -66,14 +66,21 @@ export function signInWithVodaPay(): Promise<VodaPayUserInfo> {
       reject(new Error("VodaPay sign-in timed out"));
     }, 30_000);
 
+    // my.onMessage = (data: any) => {
+    //   console.log("MESSAGE RECEIVED: " + JSON.stringify(data));
+    //   if (data?.action?.type === "AuthCode") {
+    //     clearTimeout(timer);
+    //     console.log("Received auth code from VodaPay: " + JSON.stringify(data.action.details ?? ""));
+    //     exchangeAuthCode(String(data.action.details)).then(resolve).catch(reject);
+    //   }
+    // };
     my.onMessage = (data: any) => {
-      console.log("MESSAGE RECEIVED: " + JSON.stringify(data));
-      if (data?.action?.type === "AuthCode") {
-        clearTimeout(timer);
-        console.log("Received auth code from VodaPay: " + JSON.stringify(data.action.details ?? ""));
-        exchangeAuthCode(String(data.action.details)).then(resolve).catch(reject);
-      }
-    };
+    if (data?.action?.type === "AuthCode") {
+    clearTimeout(timer);
+    const userInfo = data.action.details as VodaPayUserInfo;
+    resolve(userInfo); // ← resolve with real data, not mock
+  }
+};
 
     my.postMessage({ action: { type: "getAuthCode" } });
   });
