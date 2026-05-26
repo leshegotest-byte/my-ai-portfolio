@@ -66,11 +66,11 @@ export function signInWithVodaPay(): Promise<VodaPayUserInfo> {
     }, 30_000);
 
     my.onMessage = (data: any) => {
-      alert("MESSAGE RECEIVED: " + JSON.stringify(data));
+      console.log("MESSAGE RECEIVED: " + JSON.stringify(data));
       if (data?.action?.type === "AuthCode") {
         clearTimeout(timer);
-        window.alert("Received auth code from VodaPay: " + JSON.stringify(data.action.details ?? ""));
-        //exchangeAuthCode(String(data.action.details ?? "")).then(resolve).catch(reject);
+        console.log("Received auth code from VodaPay: " + JSON.stringify(data.action.details ?? ""));
+        exchangeAuthCode(String(data.action.details)).then(resolve).catch(reject);
       }
     };
 
