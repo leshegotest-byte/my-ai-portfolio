@@ -19,31 +19,46 @@ export type Database = {
           category: string
           created_at: string
           description: string
+          dividend_yield: number
           expected_return: number
           id: string
+          market_cap: number
           name: string
           price: number
           risk_level: string
+          sector: string
+          ticker: string | null
+          volatility: number
         }
         Insert: {
           category: string
           created_at?: string
           description: string
+          dividend_yield?: number
           expected_return: number
           id?: string
+          market_cap?: number
           name: string
           price: number
           risk_level: string
+          sector?: string
+          ticker?: string | null
+          volatility?: number
         }
         Update: {
           category?: string
           created_at?: string
           description?: string
+          dividend_yield?: number
           expected_return?: number
           id?: string
+          market_cap?: number
           name?: string
           price?: number
           risk_level?: string
+          sector?: string
+          ticker?: string | null
+          volatility?: number
         }
         Relationships: []
       }
@@ -108,6 +123,63 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      user_preferences: {
+        Row: {
+          created_at: string
+          investment_amount: number
+          investment_goal: string
+          investment_type: string
+          liquidity: string
+          risk_appetite: string
+          sectors: string[]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          investment_amount?: number
+          investment_goal?: string
+          investment_type?: string
+          liquidity?: string
+          risk_appetite?: string
+          sectors?: string[]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          investment_amount?: number
+          investment_goal?: string
+          investment_type?: string
+          liquidity?: string
+          risk_appetite?: string
+          sectors?: string[]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      watchlist: {
+        Row: {
+          created_at: string
+          id: string
+          instrument_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          instrument_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          instrument_id?: string
+          user_id?: string
+        }
+        Relationships: []
       }
     }
     Views: {

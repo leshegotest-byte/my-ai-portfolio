@@ -1,21 +1,14 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
-import { ArrowLeft, Sparkles, Loader2, TrendingUp, Shield, Zap } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ArrowLeft, Sparkles, Loader2, TrendingUp, Shield, Zap, Search, SlidersHorizontal, Star } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { z } from "zod";
 import { initiateVodaPayPayment } from "@/lib/vodapay";
-
-type Instrument = {
-  id: string;
-  name: string;
-  category: string;
-  description: string;
-  price: number;
-  expected_return: number;
-  risk_level: "Low" | "Medium" | "High";
-};
+import { AssetAnalysis } from "@/components/AssetAnalysis";
+import { WatchlistButton } from "@/components/WatchlistButton";
+import { rankInstruments, SECTORS, type InstrumentLite, type Preferences } from "@/lib/recommendations";
 
 export const Route = createFileRoute("/_authenticated/invest")({
   head: () => ({ meta: [{ title: "Invest — SmartInVest" }] }),
@@ -28,27 +21,78 @@ const riskMeta: Record<string, { icon: typeof Shield; tone: string }> = {
   High: { icon: Zap, tone: "text-destructive" },
 };
 
+type View = "browse" | "watchlist";
+
 function InvestPage() {
-  const [instruments, setInstruments] = useState<Instrument[]>([]);
+  const [instruments, setInstruments] = useState<InstrumentLite[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState<Instrument | null>(null);
+  const [view, setView] = useState<View>("browse");
+  const [search, setSearch] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filterRisk, setFilterRisk] = useState<string | null>(null);
+  const [filterSector, setFilterSector] = useState<string | null>(null);
+  const [minReturn, setMinReturn] = useState(0);
+  const [minDividend, setMinDividend] = useState(0);
+  const [watchlistIds, setWatchlistIds] = useState<Set<string>>(new Set());
+  const [preferences, setPreferences] = useState<Preferences | null>(null);
+
+  const [analyzing, setAnalyzing] = useState<InstrumentLite | null>(null);
+  const [buying, setBuying] = useState<InstrumentLite | null>(null);
 
   useEffect(() => {
     (async () => {
-      const { data, error } = await supabase
-        .from("instruments")
-        .select("*")
-        .order("category", { ascending: true });
-      if (error) toast.error(error.message);
-      else setInstruments((data ?? []) as Instrument[]);
+      const { data: u } = await supabase.auth.getUser();
+      const [instRes, watchRes, prefRes] = await Promise.all([
+        supabase.from("instruments").select("*").order("category"),
+        u.user ? supabase.from("watchlist").select("instrument_id").eq("user_id", u.user.id) : Promise.resolve({ data: [] as any[] }),
+        u.user ? supabase.from("user_preferences").select("*").eq("user_id", u.user.id).maybeSingle() : Promise.resolve({ data: null as any }),
+      ]);
+      if (instRes.error) toast.error(instRes.error.message);
+      else setInstruments((instRes.data ?? []) as InstrumentLite[]);
+      setWatchlistIds(new Set(((watchRes as any).data ?? []).map((w: any) => w.instrument_id)));
+      const p = (prefRes as any).data;
+      if (p) {
+        setPreferences({
+          risk_appetite: p.risk_appetite,
+          investment_goal: p.investment_goal,
+          investment_type: p.investment_type,
+          investment_amount: Number(p.investment_amount),
+          liquidity: p.liquidity,
+          sectors: p.sectors ?? [],
+        });
+      }
       setLoading(false);
     })();
   }, []);
 
-  const grouped = instruments.reduce<Record<string, Instrument[]>>((acc, i) => {
-    (acc[i.category] ??= []).push(i);
-    return acc;
-  }, {});
+  const refreshWatchlist = async () => {
+    const { data: u } = await supabase.auth.getUser();
+    if (!u.user) return;
+    const { data } = await supabase.from("watchlist").select("instrument_id").eq("user_id", u.user.id);
+    setWatchlistIds(new Set((data ?? []).map((w) => w.instrument_id)));
+  };
+
+  const filtered = useMemo(() => {
+    let list = instruments;
+    if (view === "watchlist") list = list.filter((i) => watchlistIds.has(i.id));
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      list = list.filter(
+        (i) =>
+          i.name.toLowerCase().includes(q) ||
+          i.sector.toLowerCase().includes(q) ||
+          (i.ticker ?? "").toLowerCase().includes(q)
+      );
+    }
+    if (filterRisk) list = list.filter((i) => i.risk_level === filterRisk);
+    if (filterSector) list = list.filter((i) => i.sector === filterSector);
+    if (minReturn > 0) list = list.filter((i) => Number(i.expected_return) >= minReturn);
+    if (minDividend > 0) list = list.filter((i) => Number(i.dividend_yield) >= minDividend);
+    if (preferences) list = rankInstruments(list, preferences);
+    return list;
+  }, [instruments, view, watchlistIds, search, filterRisk, filterSector, minReturn, minDividend, preferences]);
+
+  const activeFilters = [filterRisk, filterSector, minReturn > 0 ? `≥${minReturn}%` : null, minDividend > 0 ? `≥${minDividend}% div` : null].filter(Boolean) as string[];
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-10">
@@ -62,59 +106,161 @@ function InvestPage() {
             <Sparkles className="size-4 text-primary" />
           </div>
         </div>
-        <div className="mx-auto max-w-xl mt-6 text-center">
-          <p className="text-sm text-muted-foreground">Browse instruments curated for your portfolio</p>
+
+        <div className="mx-auto max-w-xl mt-5">
+          <div className="relative">
+            <Search className="size-4 absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by name, sector, ticker…"
+              className="w-full bg-card border border-border rounded-full pl-11 pr-4 py-3 text-sm outline-none focus:border-primary"
+            />
+          </div>
+
+          <div className="mt-3 flex items-center gap-2 overflow-x-auto pb-1">
+            <button
+              onClick={() => setView("browse")}
+              className={cn("text-sm px-4 py-1.5 rounded-full transition whitespace-nowrap", view === "browse" ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground")}
+            >
+              All
+            </button>
+            <button
+              onClick={() => setView("watchlist")}
+              className={cn("text-sm px-4 py-1.5 rounded-full transition whitespace-nowrap inline-flex items-center gap-1", view === "watchlist" ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground")}
+            >
+              <Star className="size-3" /> Watchlist ({watchlistIds.size})
+            </button>
+            <button
+              onClick={() => setFiltersOpen(!filtersOpen)}
+              className={cn("text-sm px-4 py-1.5 rounded-full transition whitespace-nowrap inline-flex items-center gap-1 ml-auto", activeFilters.length > 0 || filtersOpen ? "bg-primary/20 text-primary border border-primary/40" : "bg-secondary text-muted-foreground")}
+            >
+              <SlidersHorizontal className="size-3" /> Filters{activeFilters.length > 0 && ` · ${activeFilters.length}`}
+            </button>
+          </div>
         </div>
       </div>
 
-      <div className="mx-auto max-w-xl px-5 -mt-2 space-y-6">
+      <div className="mx-auto max-w-xl px-5 -mt-2 space-y-4">
+        {filtersOpen && (
+          <div className="bg-card rounded-2xl p-4 border border-border space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
+            <div>
+              <p className="text-xs text-muted-foreground mb-2 uppercase tracking-wide">Risk</p>
+              <div className="flex gap-2">
+                {["Low", "Medium", "High"].map((r) => (
+                  <button key={r}
+                    onClick={() => setFilterRisk(filterRisk === r ? null : r)}
+                    className={cn("flex-1 text-xs py-2 rounded-full border transition", filterRisk === r ? "bg-primary text-primary-foreground border-primary" : "border-border")}>
+                    {r}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-2 uppercase tracking-wide">Sector</p>
+              <div className="flex flex-wrap gap-1.5">
+                {SECTORS.map((s) => (
+                  <button key={s}
+                    onClick={() => setFilterSector(filterSector === s ? null : s)}
+                    className={cn("text-xs px-3 py-1.5 rounded-full border transition", filterSector === s ? "bg-primary text-primary-foreground border-primary" : "border-border")}>
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Min return: {minReturn}%</p>
+                <input type="range" min={0} max={20} value={minReturn} onChange={(e) => setMinReturn(Number(e.target.value))} className="w-full accent-primary" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Min dividend: {minDividend}%</p>
+                <input type="range" min={0} max={10} value={minDividend} onChange={(e) => setMinDividend(Number(e.target.value))} className="w-full accent-primary" />
+              </div>
+            </div>
+            <button onClick={() => { setFilterRisk(null); setFilterSector(null); setMinReturn(0); setMinDividend(0); }}
+              className="text-xs text-muted-foreground hover:text-foreground underline">
+              Clear all filters
+            </button>
+          </div>
+        )}
+
+        {!preferences && !loading && (
+          <Link to="/preferences" className="block rounded-2xl border border-primary/30 bg-primary/5 p-4 hover:bg-primary/10 transition">
+            <p className="font-semibold text-sm flex items-center gap-2">
+              <Sparkles className="size-4 text-primary" /> Personalize your recommendations
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">Set your investment preferences to see AI-ranked picks tailored to you.</p>
+          </Link>
+        )}
+
         {loading ? (
-          <div className="bg-card rounded-2xl p-6 text-center text-sm text-muted-foreground flex items-center justify-center gap-2">
-            <Loader2 className="size-4 animate-spin" /> Loading instruments…
+          <div className="space-y-3">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="bg-card rounded-2xl p-5 animate-pulse h-32" />
+            ))}
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="bg-card rounded-2xl p-8 text-center">
+            <p className="font-semibold">No instruments found</p>
+            <p className="text-sm text-muted-foreground mt-1">Try adjusting your filters or search.</p>
           </div>
         ) : (
-          Object.entries(grouped).map(([cat, items]) => (
-            <section key={cat}>
-              <h2 className="text-sm font-bold uppercase tracking-wide text-muted-foreground mb-3">{cat}</h2>
-              <div className="space-y-3">
-                {items.map((i) => {
-                  const Meta = riskMeta[i.risk_level] ?? riskMeta.Medium;
-                  const Icon = Meta.icon;
-                  return (
-                    <button
-                      key={i.id}
-                      onClick={() => setSelected(i)}
-                      className="w-full text-left bg-card rounded-2xl p-5 hover:ring-2 hover:ring-primary/30 transition"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex-1">
-                          <p className="font-semibold">{i.name}</p>
-                          <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{i.description}</p>
-                        </div>
-                        <div className={cn("flex items-center gap-1 text-xs font-semibold", Meta.tone)}>
-                          <Icon className="size-3.5" /> {i.risk_level}
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 mt-4 pt-4 border-t border-border">
-                        <div>
-                          <p className="text-xs text-muted-foreground">Unit price</p>
-                          <p className="font-bold mt-0.5">R{Number(i.price).toLocaleString()}</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-xs text-muted-foreground">Expected return</p>
-                          <p className="font-bold mt-0.5 text-primary">+{i.expected_return}%</p>
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </section>
-          ))
+          <div className="space-y-3">
+            {filtered.map((i: any) => {
+              const Meta = riskMeta[i.risk_level] ?? riskMeta.Medium;
+              const Icon = Meta.icon;
+              const score: number | undefined = i._score;
+              return (
+                <button
+                  key={i.id}
+                  onClick={() => setAnalyzing(i)}
+                  className="w-full text-left bg-card rounded-2xl p-5 hover:ring-2 hover:ring-primary/30 transition relative"
+                >
+                  <div className="absolute top-3 right-3">
+                    <WatchlistButton instrumentId={i.id} />
+                  </div>
+                  <div className="pr-9">
+                    <div className="flex items-center gap-2">
+                      <p className="font-semibold">{i.name}</p>
+                      {score !== undefined && score >= 70 && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-primary/20 text-primary">
+                          {score}% match
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5">{i.sector} · {i.ticker ?? i.category}</p>
+                    <p className="text-sm text-muted-foreground mt-1.5 line-clamp-2">{i.description}</p>
+                  </div>
+                  <div className="grid grid-cols-3 mt-4 pt-4 border-t border-border gap-2">
+                    <div>
+                      <p className="text-[10px] text-muted-foreground uppercase">Price</p>
+                      <p className="font-bold text-sm mt-0.5">R{Number(i.price).toLocaleString()}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-muted-foreground uppercase">Return</p>
+                      <p className="font-bold text-sm mt-0.5 text-primary">+{i.expected_return}%</p>
+                    </div>
+                    <div className={cn("flex items-center justify-end gap-1 text-xs font-semibold", Meta.tone)}>
+                      <Icon className="size-3.5" /> {i.risk_level}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         )}
       </div>
 
-      {selected && <PurchaseSheet instrument={selected} onClose={() => setSelected(null)} />}
+      {analyzing && (
+        <AssetAnalysis
+          instrument={analyzing}
+          preferences={preferences}
+          onClose={() => { setAnalyzing(null); refreshWatchlist(); }}
+          onBuy={() => { setBuying(analyzing); setAnalyzing(null); }}
+        />
+      )}
+      {buying && <PurchaseSheet instrument={buying} onClose={() => setBuying(null)} />}
     </div>
   );
 }
@@ -124,7 +270,7 @@ const amountSchema = z
   .min(50, "Minimum R50")
   .max(10_000_000, "Amount too large");
 
-function PurchaseSheet({ instrument, onClose }: { instrument: Instrument; onClose: () => void }) {
+function PurchaseSheet({ instrument, onClose }: { instrument: InstrumentLite; onClose: () => void }) {
   const [amount, setAmount] = useState<string>("1000");
   const [submitting, setSubmitting] = useState(false);
   const navigate = useNavigate();
@@ -134,45 +280,39 @@ function PurchaseSheet({ instrument, onClose }: { instrument: Instrument; onClos
   const projected = num * (1 + Number(instrument.expected_return) / 100);
 
   const buy = async () => {
-  const parsed = amountSchema.safeParse(num);
-  if (!parsed.success) {
-    toast.error(parsed.error.issues[0].message);
-    return;
-  }
-  setSubmitting(true);
-  try {
-    const { data: u } = await supabase.auth.getUser();
-    if (!u.user) throw new Error("Not signed in");
-
-    const amountInCents = Math.round(num * 100);
-
-    // Check if VodaPay bridge exists BEFORE trying payment
-    const myBridge = typeof window !== "undefined" ? window.my : undefined;
-    if (!myBridge || typeof myBridge.postMessage !== "function") {
-      toast.error("VodaPay bridge not found — window.my is " + typeof myBridge);
-      setSubmitting(false);
+    const parsed = amountSchema.safeParse(num);
+    if (!parsed.success) {
+      toast.error(parsed.error.issues[0].message);
       return;
     }
+    setSubmitting(true);
+    try {
+      const { data: u } = await supabase.auth.getUser();
+      if (!u.user) throw new Error("Not signed in");
 
-    toast.info("Sending payment to VodaPay...");
-    await initiateVodaPayPayment(amountInCents);
+      const amountInCents = Math.round(num * 100);
+      const myBridge = typeof window !== "undefined" ? window.my : undefined;
+      if (myBridge && typeof myBridge.postMessage === "function") {
+        toast.info("Sending payment to VodaPay...");
+        await initiateVodaPayPayment(amountInCents);
+      }
 
-    const { error } = await supabase.from("purchases").insert({
-      user_id: u.user.id,
-      instrument_id: instrument.id,
-      amount: num,
-      units: Number(units.toFixed(4)),
-    });
-    if (error) throw error;
+      const { error } = await supabase.from("purchases").insert({
+        user_id: u.user.id,
+        instrument_id: instrument.id,
+        amount: num,
+        units: Number(units.toFixed(4)),
+      });
+      if (error) throw error;
 
-    toast.success(`Purchased R${num.toLocaleString()} of ${instrument.name}`);
-    navigate({ to: "/" });
-  } catch (err: any) {
-    toast.error(err.message ?? "Purchase failed");
-  } finally {
-    setSubmitting(false);
-  }
-};
+      toast.success(`Purchased R${num.toLocaleString()} of ${instrument.name}`);
+      navigate({ to: "/" });
+    } catch (err: any) {
+      toast.error(err.message ?? "Purchase failed");
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center" onClick={onClose}>
@@ -180,9 +320,9 @@ function PurchaseSheet({ instrument, onClose }: { instrument: Instrument; onClos
         className="w-full sm:max-w-md bg-card rounded-t-3xl sm:rounded-3xl p-6 shadow-[var(--shadow-glow)]"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="size-1 w-12 bg-border rounded-full mx-auto mb-4 sm:hidden" />
+        <div className="h-1 w-12 bg-border rounded-full mx-auto mb-4 sm:hidden" />
         <h3 className="text-xl font-bold">{instrument.name}</h3>
-        <p className="text-sm text-muted-foreground mt-1">{instrument.description}</p>
+        <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{instrument.description}</p>
 
         <div className="grid grid-cols-3 gap-2 mt-5">
           <Stat label="Unit price" value={`R${Number(instrument.price).toLocaleString()}`} />
@@ -202,11 +342,8 @@ function PurchaseSheet({ instrument, onClose }: { instrument: Instrument; onClos
           />
           <div className="flex gap-2 mt-3">
             {[500, 1000, 5000, 10000].map((v) => (
-              <button
-                key={v}
-                onClick={() => setAmount(String(v))}
-                className="flex-1 text-xs py-2 rounded-full bg-secondary hover:bg-muted transition"
-              >
+              <button key={v} onClick={() => setAmount(String(v))}
+                className="flex-1 text-xs py-2 rounded-full bg-secondary hover:bg-muted transition">
                 R{v.toLocaleString()}
               </button>
             ))}
@@ -241,7 +378,7 @@ function Stat({ label, value, accent }: { label: string; value: string; accent?:
   return (
     <div className="rounded-2xl bg-background/40 border border-border p-3 text-center">
       <p className="text-[10px] text-muted-foreground uppercase tracking-wide">{label}</p>
-      <p className={cn("text-sm font-bold mt-1", accent && "text-primary")}>{value}</p>
+      <p className={cn("font-bold mt-1 text-sm", accent && "text-primary")}>{value}</p>
     </div>
   );
 }
