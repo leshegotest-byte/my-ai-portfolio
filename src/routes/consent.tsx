@@ -9,6 +9,7 @@ import {
   emailFromUserInfo,
   passwordFromUserInfo,
 } from "@/lib/vodapay";
+import { TermsModal } from "@/components/TermsModal";
 
 export const Route = createFileRoute("/consent")({
   validateSearch: (s) => ({ redirect: (s.redirect as string) || "/" }),
@@ -23,6 +24,8 @@ function ConsentPage() {
   const navigate = useNavigate();
   const { redirect: redirectTo } = Route.useSearch();
   const [agreed, setAgreed] = useState(false);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [termsOpen, setTermsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const pending = typeof window !== "undefined" ? readPendingUser() : null;
