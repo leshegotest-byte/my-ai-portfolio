@@ -172,6 +172,14 @@ function ConsentPage() {
           </button>
         </div>
       </div>
+      <TermsModal
+        open={termsOpen}
+        onClose={() => setTermsOpen(false)}
+        onAccept={() => {
+          setAcceptedTerms(true);
+          setTermsOpen(false);
+        }}
+      />
     </div>
   );
 }
