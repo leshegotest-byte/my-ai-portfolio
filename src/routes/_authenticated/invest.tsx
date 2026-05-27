@@ -134,40 +134,45 @@ function PurchaseSheet({ instrument, onClose }: { instrument: Instrument; onClos
   const projected = num * (1 + Number(instrument.expected_return) / 100);
 
   const buy = async () => {
-    const parsed = amountSchema.safeParse(num);
-    if (!parsed.success) {
-      toast.error(parsed.error.issues[0].message);
+  const parsed = amountSchema.safeParse(num);
+  if (!parsed.success) {
+    toast.error(parsed.error.issues[0].message);
+    return;
+  }
+  setSubmitting(true);
+  try {
+    const { data: u } = await supabase.auth.getUser();
+    if (!u.user) throw new Error("Not signed in");
+
+    const amountInCents = Math.round(num * 100);
+
+    // Check if VodaPay bridge exists BEFORE trying payment
+    const myBridge = typeof window !== "undefined" ? window.my : undefined;
+    if (!myBridge || typeof myBridge.postMessage !== "function") {
+      toast.error("VodaPay bridge not found — window.my is " + typeof myBridge);
+      setSubmitting(false);
       return;
     }
-    setSubmitting(true);
-    try {
-      const { data: u } = await supabase.auth.getUser();
-      if (!u.user) throw new Error("Not signed in");
 
-      // Convert ZAR to cents for VodaPay (R1000 = 100000 cents)
-      const amountInCents = Math.round(num * 100);
+    toast.info("Sending payment to VodaPay...");
+    await initiateVodaPayPayment(amountInCents);
 
-      // Initiate VodaPay payment — sends postMessage to mini-program
-      // mini-program calls paymentUrl API, does tradePay, posts result back
-      await initiateVodaPayPayment(amountInCents);
+    const { error } = await supabase.from("purchases").insert({
+      user_id: u.user.id,
+      instrument_id: instrument.id,
+      amount: num,
+      units: Number(units.toFixed(4)),
+    });
+    if (error) throw error;
 
-      // Only insert purchase record after successful payment
-      const { error } = await supabase.from("purchases").insert({
-        user_id: u.user.id,
-        instrument_id: instrument.id,
-        amount: num,
-        units: Number(units.toFixed(4)),
-      });
-      if (error) throw error;
-
-      toast.success(`Purchased R${num.toLocaleString()} of ${instrument.name}`);
-      navigate({ to: "/" });
-    } catch (err: any) {
-      toast.error(err.message ?? "Purchase failed");
-    } finally {
-      setSubmitting(false);
-    }
-  };
+    toast.success(`Purchased R${num.toLocaleString()} of ${instrument.name}`);
+    navigate({ to: "/" });
+  } catch (err: any) {
+    toast.error(err.message ?? "Purchase failed");
+  } finally {
+    setSubmitting(false);
+  }
+};
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center" onClick={onClose}>
