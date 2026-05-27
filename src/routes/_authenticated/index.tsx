@@ -94,6 +94,9 @@ function Index() {
               <Link to="/invest" className="rounded-full bg-primary text-primary-foreground px-3 py-1.5 text-sm font-semibold inline-flex items-center gap-1 hover:opacity-90 transition">
                 <Plus className="size-4" /> Invest
               </Link>
+              <Link to="/preferences" className="rounded-full p-2 bg-secondary hover:bg-muted transition" aria-label="Preferences">
+                <Settings className="size-4" />
+              </Link>
               <button onClick={logout} className="rounded-full p-2 bg-secondary hover:bg-muted transition" aria-label="Sign out">
                 <LogOut className="size-4" />
               </button>
