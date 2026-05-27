@@ -9,6 +9,7 @@ import {
   emailFromUserInfo,
   passwordFromUserInfo,
 } from "@/lib/vodapay";
+import { TermsModal } from "@/components/TermsModal";
 
 export const Route = createFileRoute("/consent")({
   validateSearch: (s) => ({ redirect: (s.redirect as string) || "/" }),
@@ -23,6 +24,8 @@ function ConsentPage() {
   const navigate = useNavigate();
   const { redirect: redirectTo } = Route.useSearch();
   const [agreed, setAgreed] = useState(false);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [termsOpen, setTermsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const pending = typeof window !== "undefined" ? readPendingUser() : null;
@@ -46,6 +49,10 @@ function ConsentPage() {
   const continueFlow = async () => {
     if (!agreed) {
       toast.error("Please confirm you are 18 or older");
+      return;
+    }
+    if (!acceptedTerms) {
+      toast.error("Please accept the Terms & Conditions");
       return;
     }
     setLoading(true);
@@ -109,7 +116,7 @@ function ConsentPage() {
             ))}
           </div>
 
-          <label className="flex items-start gap-3 cursor-pointer select-none mb-5">
+          <label className="flex items-start gap-3 cursor-pointer select-none mb-3">
             <input
               type="checkbox"
               checked={agreed}
@@ -117,15 +124,37 @@ function ConsentPage() {
               className="mt-1 size-4 accent-primary"
             />
             <span className="text-sm">
-              I confirm that I am <strong>18 years of age or older</strong> and agree to SmartInVest's
-              terms of service.
+              I confirm that I am <strong>18 years of age or older</strong>.
+            </span>
+          </label>
+
+          <label className="flex items-start gap-3 cursor-pointer select-none mb-5">
+            <input
+              type="checkbox"
+              checked={acceptedTerms}
+              onChange={(e) => setAcceptedTerms(e.target.checked)}
+              className="mt-1 size-4 accent-primary"
+            />
+            <span className="text-sm">
+              I have read and agree to the{" "}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setTermsOpen(true);
+                }}
+                className="text-primary underline underline-offset-2 hover:opacity-80"
+              >
+                Terms &amp; Conditions
+              </button>
+              .
             </span>
           </label>
 
           <button
             type="button"
             onClick={continueFlow}
-            disabled={loading || !agreed}
+            disabled={loading || !agreed || !acceptedTerms}
             className="w-full bg-primary text-primary-foreground rounded-full py-3 font-semibold hover:opacity-90 transition disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {loading && <Loader2 className="size-4 animate-spin" />}
@@ -143,6 +172,14 @@ function ConsentPage() {
           </button>
         </div>
       </div>
+      <TermsModal
+        open={termsOpen}
+        onClose={() => setTermsOpen(false)}
+        onAccept={() => {
+          setAcceptedTerms(true);
+          setTermsOpen(false);
+        }}
+      />
     </div>
   );
 }
