@@ -33,57 +33,106 @@ const MOCK_USER: VodaPayUserInfo = {
   ],
 };
 
+// ─── On-screen debug logger ───────────────────────────────────────────────────
+function debugLog(msg: string) {
+  const timestamp = new Date().toISOString().split("T")[1].slice(0, 8);
+  const line = `[${timestamp}] ${msg}`;
+
+  // Create panel if it doesn't exist
+  let panel = document.getElementById("__vp_debug__");
+  if (!panel) {
+    panel = document.createElement("div");
+    panel.id = "__vp_debug__";
+    panel.style.cssText = `
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      max-height: 40vh;
+      overflow-y: auto;
+      background: rgba(0,0,0,0.85);
+      color: #00ff00;
+      font-family: monospace;
+      font-size: 11px;
+      padding: 8px;
+      z-index: 99999;
+      border-top: 2px solid #00ff00;
+    `;
+    document.body.appendChild(panel);
+  }
+
+  const entry = document.createElement("div");
+  entry.textContent = line;
+  panel.appendChild(entry);
+  panel.scrollTop = panel.scrollHeight;
+}
+
+// ─── Mock fallback ────────────────────────────────────────────────────────────
 async function exchangeAuthCode(_authCode: string): Promise<VodaPayUserInfo> {
   await new Promise((r) => setTimeout(r, 400));
   return MOCK_USER;
 }
 
-// Global callback — set before React mounts anything
+// ─── Global callback registry ─────────────────────────────────────────────────
 let pendingResolve: ((data: any) => void) | null = null;
 
-// Assign my.onMessage at module load time
+// ─── Assign my.onMessage at module load ───────────────────────────────────────
 if (typeof window !== "undefined") {
-  const assignHandler = (attempts = 0) => {
-    if (window.my) {
-      window.my.onMessage = (data: any) => {
-        alert("[VodaPay] onMessage fired: " + JSON.stringify(data));
-        if (pendingResolve) {
-          pendingResolve(data);
-          pendingResolve = null;
-        }
-      };
-      alert("[VodaPay] onMessage handler registered at module load ✅");
-    } else if (attempts < 50) {
-      setTimeout(() => assignHandler(attempts + 1), 100);
-    } else {
-      alert("[VodaPay] window.my never appeared after 50 attempts");
-    }
+  // Wait for DOM before logging
+  const init = () => {
+    debugLog("Module loaded");
+    debugLog("window.my = " + typeof window.my);
+
+    const assignHandler = (attempts = 0) => {
+      if (window.my) {
+        window.my.onMessage = (data: any) => {
+          debugLog("onMessage fired: " + JSON.stringify(data));
+          if (pendingResolve) {
+            pendingResolve(data);
+            pendingResolve = null;
+          }
+        };
+        debugLog("onMessage handler registered ✅");
+      } else if (attempts < 50) {
+        setTimeout(() => assignHandler(attempts + 1), 100);
+      } else {
+        debugLog("window.my never appeared after 50 attempts ❌");
+      }
+    };
+
+    assignHandler();
+
+    // ENV check after 2s
+    setTimeout(() => {
+      debugLog("ENV CHECK: window.my = " + typeof window.my);
+      debugLog("userAgent: " + navigator.userAgent.slice(0, 80));
+    }, 2000);
   };
-  assignHandler();
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
 }
 
-// ENV CHECK — tells us what environment we are running in
-setTimeout(() => {
-  alert(
-    "ENV CHECK\n" +
-    "window.my: " + typeof window.my + "\n" +
-    "userAgent: " + navigator.userAgent
-  );
-}, 2000);
-
+// ─── Main SSO function ────────────────────────────────────────────────────────
 export function signInWithVodaPay(): Promise<VodaPayUserInfo> {
   return new Promise((resolve, reject) => {
     const my = typeof window !== "undefined" ? window.my : undefined;
 
+    debugLog("signInWithVodaPay called");
+    debugLog("window.my at call time = " + typeof my);
+
     if (!my || typeof my.postMessage !== "function") {
-      alert("[VodaPay] window.my not found — falling back to mock user");
+      debugLog("window.my not found — falling back to mock ❌");
       exchangeAuthCode("mock-auth-code").then(resolve).catch(reject);
       return;
     }
 
     const timer = setTimeout(() => {
       pendingResolve = null;
-      alert("[VodaPay] TIMED OUT — onMessage never fired after 30s");
+      debugLog("TIMED OUT — onMessage never fired ❌");
       reject(new Error("VodaPay sign-in timed out"));
     }, 30_000);
 
@@ -91,27 +140,28 @@ export function signInWithVodaPay(): Promise<VodaPayUserInfo> {
       if (data?.action?.type === "AuthCode") {
         clearTimeout(timer);
         const userInfo = data.action.details as VodaPayUserInfo;
-        alert("[VodaPay] Success! UserInfo: " + JSON.stringify(userInfo));
+        debugLog("Success! userId = " + userInfo.userId);
         resolve(userInfo);
       } else {
-        alert("[VodaPay] Unexpected action type: " + JSON.stringify(data?.action?.type));
+        debugLog("Unexpected action: " + JSON.stringify(data?.action?.type));
       }
     };
 
-    // Reassign onMessage here too in case module-load assignment was too early
+    // Reassign here too as belt-and-suspenders
     my.onMessage = (data: any) => {
-      alert("[VodaPay] onMessage fired inside signIn: " + JSON.stringify(data));
+      debugLog("onMessage fired inside signIn: " + JSON.stringify(data));
       if (pendingResolve) {
         pendingResolve(data);
         pendingResolve = null;
       }
     };
 
-    alert("[VodaPay] Posting getAuthCode to mini-program...");
+    debugLog("Posting getAuthCode to mini-program...");
     my.postMessage({ action: { type: "getAuthCode" } });
   });
 }
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 export function emailFromUserInfo(u: VodaPayUserInfo): string {
   const email = u.contactInfos?.find((c) => c.contactType === "EMAIL")?.contactNo;
   if (email) return email;
