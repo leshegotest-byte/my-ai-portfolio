@@ -1,8 +1,3 @@
-// VodaPay SSO helper. In the VodaPay mini-program WebView, `window.my` is
-// injected and we use postMessage to request an auth code. Outside that
-// environment (regular browser preview) we fall back to a mock identity so
-// the flow can be exercised end-to-end.
-
 export type VodaPayUserInfo = {
   nickName?: string;
   contactInfos?: { contactType: string; contactNo: string }[];
@@ -38,66 +33,77 @@ const MOCK_USER: VodaPayUserInfo = {
   ],
 };
 
-/**
- * Exchange an authCode for user info. In production this should hit your
- * backend which calls the VodaPay token + user-info APIs. For now we mock.
- */
 async function exchangeAuthCode(_authCode: string): Promise<VodaPayUserInfo> {
   await new Promise((r) => setTimeout(r, 400));
   return MOCK_USER;
 }
 
-/**
- * Trigger VodaPay SSO. Resolves with the userInfo payload.
- * Times out / falls back to mock when not inside the VodaPay WebView.
- */
-export function signInWithVodaPay(): Promise<VodaPayUserInfo> {
-  return new Promise((resolve, reject) => {
+// Global callback registry — set before React mounts anything
+let pendingResolve: ((data: any) => void) | null = null;
 
-    const waitForMy = (attempts = 0) => {
-      const my = typeof window !== "undefined" ? window.my : undefined;
-
-      if (!my || typeof my.postMessage !== "function") {
-        if (attempts >= 30) {
-          console.warn("window.my never appeared, falling back to mock");
-          exchangeAuthCode("mock-auth-code").then(resolve).catch(reject);
-          return;
-        }
-        setTimeout(() => waitForMy(attempts + 1), 100);
-        return;
-      }
-
-      const timer = setTimeout(() => {
-        reject(new Error("VodaPay sign-in timed out"));
-      }, 30_000);
-
-      my.onMessage = (data: any) => {
-        console.log("onMessage received:", JSON.stringify(data));
-        if (data?.action?.type === "AuthCode") {
-          clearTimeout(timer);
-          const userInfo = data.action.details as VodaPayUserInfo;
-          console.log("Resolving with real userInfo:", JSON.stringify(userInfo));
-          resolve(userInfo);
+// Assign my.onMessage at module load time, as early as possible
+if (typeof window !== "undefined") {
+  const assignHandler = (attempts = 0) => {
+    if (window.my) {
+      window.my.onMessage = (data: any) => {
+        alert("[VodaPay] onMessage fired: " + JSON.stringify(data));
+        if (pendingResolve) {
+          pendingResolve(data);
+          pendingResolve = null;
         }
       };
+      alert("[VodaPay] onMessage handler registered successfully");
+    } else if (attempts < 50) {
+      setTimeout(() => assignHandler(attempts + 1), 50);
+    } else {
+      alert("[VodaPay] window.my never appeared after 50 attempts — not inside VodaPay WebView?");
+    }
+  };
+  assignHandler();
+}
 
-      my.postMessage({ action: { type: "getAuthCode" } });
+export function signInWithVodaPay(): Promise<VodaPayUserInfo> {
+  return new Promise((resolve, reject) => {
+    const my = typeof window !== "undefined" ? window.my : undefined;
+
+    // Not inside VodaPay WebView — use mock
+    if (!my || typeof my.postMessage !== "function") {
+      alert("[VodaPay] window.my not found — falling back to mock user");
+      exchangeAuthCode("mock-auth-code").then(resolve).catch(reject);
+      return;
+    }
+
+    alert("[VodaPay] Posting getAuthCode message to mini-program...");
+
+    const timer = setTimeout(() => {
+      pendingResolve = null;
+      alert("[VodaPay] TIMED OUT — onMessage never fired after 30s");
+      reject(new Error("VodaPay sign-in timed out"));
+    }, 30_000);
+
+    // Register resolve callback BEFORE postMessage
+    pendingResolve = (data: any) => {
+      if (data?.action?.type === "AuthCode") {
+        clearTimeout(timer);
+        const userInfo = data.action.details as VodaPayUserInfo;
+        alert("[VodaPay] Success! UserInfo: " + JSON.stringify(userInfo));
+        resolve(userInfo);
+      } else {
+        alert("[VodaPay] onMessage received unexpected action type: " + JSON.stringify(data?.action?.type));
+      }
     };
 
-    waitForMy();
+    my.postMessage({ action: { type: "getAuthCode" } });
   });
 }
 
 export function emailFromUserInfo(u: VodaPayUserInfo): string {
   const email = u.contactInfos?.find((c) => c.contactType === "EMAIL")?.contactNo;
   if (email) return email;
-  // Fallback synthetic email keyed off the stable userId.
   return `vp_${u.userId.replace(/[^a-zA-Z0-9]/g, "")}@vodapay.user`;
 }
 
 export function passwordFromUserInfo(u: VodaPayUserInfo): string {
-  // Deterministic password derived from the VodaPay userId so the same SSO
-  // user always lands on the same Supabase account. Demo-only.
   return `vp!${u.userId}!SmartInVest`;
 }
 
@@ -106,11 +112,13 @@ const STORAGE_KEY = "vp_pending_user";
 export function stashPendingUser(u: VodaPayUserInfo) {
   sessionStorage.setItem(STORAGE_KEY, JSON.stringify(u));
 }
+
 export function readPendingUser(): VodaPayUserInfo | null {
   const raw = sessionStorage.getItem(STORAGE_KEY);
   if (!raw) return null;
   try { return JSON.parse(raw) as VodaPayUserInfo; } catch { return null; }
 }
+
 export function clearPendingUser() {
   sessionStorage.removeItem(STORAGE_KEY);
 }
