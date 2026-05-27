@@ -51,6 +51,10 @@ function ConsentPage() {
       toast.error("Please confirm you are 18 or older");
       return;
     }
+    if (!acceptedTerms) {
+      toast.error("Please accept the Terms & Conditions");
+      return;
+    }
     setLoading(true);
     try {
       const email = emailFromUserInfo(pending);
