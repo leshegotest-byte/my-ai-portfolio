@@ -103,10 +103,8 @@ function RootShell({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <head>
-        
         <HeadContent />
         <script type="text/javascript" src="https://appx/web-view.min.js"></script> 
-
       </head>
       <body>
         {children}
