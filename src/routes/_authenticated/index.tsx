@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { ArrowUp, Sparkles, TrendingUp, Bot, Send, LogOut, Plus, Wallet } from "lucide-react";
+import { ArrowUp, Sparkles, TrendingUp, Bot, Send, LogOut, Plus, Wallet, Settings, Star } from "lucide-react";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 import { useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
