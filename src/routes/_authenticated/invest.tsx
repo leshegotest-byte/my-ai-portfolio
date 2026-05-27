@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { z } from "zod";
+import { initiateVodaPayPayment } from "@/lib/vodapay";
 
 type Instrument = {
   id: string;
@@ -142,6 +143,15 @@ function PurchaseSheet({ instrument, onClose }: { instrument: Instrument; onClos
     try {
       const { data: u } = await supabase.auth.getUser();
       if (!u.user) throw new Error("Not signed in");
+
+      // Convert ZAR to cents for VodaPay (R1000 = 100000 cents)
+      const amountInCents = Math.round(num * 100);
+
+      // Initiate VodaPay payment — sends postMessage to mini-program
+      // mini-program calls paymentUrl API, does tradePay, posts result back
+      await initiateVodaPayPayment(amountInCents);
+
+      // Only insert purchase record after successful payment
       const { error } = await supabase.from("purchases").insert({
         user_id: u.user.id,
         instrument_id: instrument.id,
@@ -149,6 +159,7 @@ function PurchaseSheet({ instrument, onClose }: { instrument: Instrument; onClos
         units: Number(units.toFixed(4)),
       });
       if (error) throw error;
+
       toast.success(`Purchased R${num.toLocaleString()} of ${instrument.name}`);
       navigate({ to: "/" });
     } catch (err: any) {
@@ -215,7 +226,7 @@ function PurchaseSheet({ instrument, onClose }: { instrument: Instrument; onClos
             Confirm purchase
           </button>
         </div>
-        <p className="text-[10px] text-muted-foreground text-center mt-3">Demo purchase — no real money is moved.</p>
+        <p className="text-[10px] text-muted-foreground text-center mt-3">Payments processed securely via VodaPay.</p>
       </div>
     </div>
   );
