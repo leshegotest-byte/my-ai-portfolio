@@ -53,36 +53,38 @@ async function exchangeAuthCode(_authCode: string): Promise<VodaPayUserInfo> {
  */
 export function signInWithVodaPay(): Promise<VodaPayUserInfo> {
   return new Promise((resolve, reject) => {
-    const my = typeof window !== "undefined" ? window.my : undefined;
-    console.log("Attempting VodaPay sign-in, window.my is " + (my ? "available" : "unavailable"));
-    if (!my || typeof my.postMessage !== "function") {
-      // Not inside VodaPay — simulate so the journey is testable in preview.
-      console.warn("window.my.postMessage is not available; falling back to mock VodaPay user");
-      exchangeAuthCode("mock-auth-code").then(resolve).catch(reject);
-      return;
-    }
 
-    const timer = setTimeout(() => {
-      reject(new Error("VodaPay sign-in timed out"));
-    }, 30_000);
+    const waitForMy = (attempts = 0) => {
+      const my = typeof window !== "undefined" ? window.my : undefined;
 
-    // my.onMessage = (data: any) => {
-    //   console.log("MESSAGE RECEIVED: " + JSON.stringify(data));
-    //   if (data?.action?.type === "AuthCode") {
-    //     clearTimeout(timer);
-    //     console.log("Received auth code from VodaPay: " + JSON.stringify(data.action.details ?? ""));
-    //     exchangeAuthCode(String(data.action.details)).then(resolve).catch(reject);
-    //   }
-    // };
-    my.onMessage = (data: any) => {
-    if (data?.action?.type === "AuthCode") {
-    clearTimeout(timer);
-    const userInfo = data.action.details as VodaPayUserInfo;
-    resolve(userInfo); // ← resolve with real data, not mock
-  }
-};
+      if (!my || typeof my.postMessage !== "function") {
+        if (attempts >= 30) {
+          console.warn("window.my never appeared, falling back to mock");
+          exchangeAuthCode("mock-auth-code").then(resolve).catch(reject);
+          return;
+        }
+        setTimeout(() => waitForMy(attempts + 1), 100);
+        return;
+      }
 
-    my.postMessage({ action: { type: "getAuthCode" } });
+      const timer = setTimeout(() => {
+        reject(new Error("VodaPay sign-in timed out"));
+      }, 30_000);
+
+      my.onMessage = (data: any) => {
+        console.log("onMessage received:", JSON.stringify(data));
+        if (data?.action?.type === "AuthCode") {
+          clearTimeout(timer);
+          const userInfo = data.action.details as VodaPayUserInfo;
+          console.log("Resolving with real userInfo:", JSON.stringify(userInfo));
+          resolve(userInfo);
+        }
+      };
+
+      my.postMessage({ action: { type: "getAuthCode" } });
+    };
+
+    waitForMy();
   });
 }
 
