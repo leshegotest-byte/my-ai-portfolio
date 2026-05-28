@@ -34,37 +34,37 @@ const MOCK_USER: VodaPayUserInfo = {
 };
 
 // ─── On-screen debug logger ───────────────────────────────────────────────────
-function debugLog(msg: string) {
-  const timestamp = new Date().toISOString().split("T")[1].slice(0, 8);
-  const line = `[${timestamp}] ${msg}`;
+// function debugLog(msg: string) {
+//   const timestamp = new Date().toISOString().split("T")[1].slice(0, 8);
+//   const line = `[${timestamp}] ${msg}`;
 
-  let panel = document.getElementById("__vp_debug__");
-  if (!panel) {
-    panel = document.createElement("div");
-    panel.id = "__vp_debug__";
-    panel.style.cssText = `
-      position: fixed;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      max-height: 40vh;
-      overflow-y: auto;
-      background: rgba(0,0,0,0.85);
-      color: #00ff00;
-      font-family: monospace;
-      font-size: 11px;
-      padding: 8px;
-      z-index: 99999;
-      border-top: 2px solid #00ff00;
-    `;
-    document.body.appendChild(panel);
-  }
+//   let panel = document.getElementById("__vp_debug__");
+//   if (!panel) {
+//     panel = document.createElement("div");
+//     panel.id = "__vp_debug__";
+//     panel.style.cssText = `
+//       position: fixed;
+//       bottom: 0;
+//       left: 0;
+//       right: 0;
+//       max-height: 40vh;
+//       overflow-y: auto;
+//       background: rgba(0,0,0,0.85);
+//       color: #00ff00;
+//       font-family: monospace;
+//       font-size: 11px;
+//       padding: 8px;
+//       z-index: 99999;
+//       border-top: 2px solid #00ff00;
+//     `;
+//     document.body.appendChild(panel);
+//   }
 
-  const entry = document.createElement("div");
-  entry.textContent = line;
-  panel.appendChild(entry);
-  panel.scrollTop = panel.scrollHeight;
-}
+//   const entry = document.createElement("div");
+//   entry.textContent = line;
+//   panel.appendChild(entry);
+//   panel.scrollTop = panel.scrollHeight;
+// }
 
 // ─── Generate a 64-character unique payment request ID ────────────────────────
 export function generatePaymentRequestId(): string {
@@ -75,7 +75,7 @@ export function generatePaymentRequestId(): string {
     random += chars.charAt(Math.floor(Math.random() * chars.length));
   }
   const id = (timestamp + random).slice(0, 64);
-  debugLog("Generated paymentRequestId: " + id);
+  // debugLog("Generated paymentRequestId: " + id);
   return id;
 }
 
@@ -91,31 +91,31 @@ let pendingResolve: ((data: any) => void) | null = null;
 // ─── Assign my.onMessage at module load ───────────────────────────────────────
 if (typeof window !== "undefined") {
   const init = () => {
-    debugLog("Module loaded");
-    debugLog("window.my = " + typeof window.my);
+    // debugLog("Module loaded");
+    // debugLog("window.my = " + typeof window.my);
 
     const assignHandler = (attempts = 0) => {
       if (window.my) {
         window.my.onMessage = (data: any) => {
-          debugLog("onMessage fired: " + JSON.stringify(data));
+          // debugLog("onMessage fired: " + JSON.stringify(data));
           if (pendingResolve) {
             pendingResolve(data);
             pendingResolve = null;
           }
         };
-        debugLog("onMessage handler registered ✅");
+        // debugLog("onMessage handler registered ✅");
       } else if (attempts < 50) {
         setTimeout(() => assignHandler(attempts + 1), 100);
       } else {
-        debugLog("window.my never appeared after 50 attempts ❌");
+        // debugLog("window.my never appeared after 50 attempts ❌");
       }
     };
 
     assignHandler();
 
     setTimeout(() => {
-      debugLog("ENV CHECK: window.my = " + typeof window.my);
-      debugLog("userAgent: " + navigator.userAgent.slice(0, 80));
+      // debugLog("ENV CHECK: window.my = " + typeof window.my);
+      // debugLog("userAgent: " + navigator.userAgent.slice(0, 80));
     }, 2000);
   };
 
@@ -131,18 +131,18 @@ export function signInWithVodaPay(): Promise<VodaPayUserInfo> {
   return new Promise((resolve, reject) => {
     const my = typeof window !== "undefined" ? window.my : undefined;
 
-    debugLog("signInWithVodaPay called");
-    debugLog("window.my at call time = " + typeof my);
+                  // debugLog("signInWithVodaPay called");
+                  // debugLog("window.my at call time = " + typeof my);
 
     if (!my || typeof my.postMessage !== "function") {
-      debugLog("window.my not found — falling back to mock ❌");
+      // debugLog("window.my not found — falling back to mock ❌");
       exchangeAuthCode("mock-auth-code").then(resolve).catch(reject);
       return;
     }
 
     const timer = setTimeout(() => {
       pendingResolve = null;
-      debugLog("TIMED OUT — onMessage never fired ❌");
+      // debugLog("TIMED OUT — onMessage never fired ❌");
       reject(new Error("VodaPay sign-in timed out"));
     }, 30_000);
 
@@ -150,22 +150,22 @@ export function signInWithVodaPay(): Promise<VodaPayUserInfo> {
       if (data?.action?.type === "AuthCode") {
         clearTimeout(timer);
         const userInfo = data.action.details as VodaPayUserInfo;
-        debugLog("Auth success! userId = " + userInfo.userId);
+        // debugLog("Auth success! userId = " + userInfo.userId);
         resolve(userInfo);
       } else {
-        debugLog("Unexpected action: " + JSON.stringify(data?.action?.type));
+        // debugLog("Unexpected action: " + JSON.stringify(data?.action?.type));
       }
     };
 
     my.onMessage = (data: any) => {
-      debugLog("onMessage fired inside signIn: " + JSON.stringify(data));
+      // debugLog("onMessage fired inside signIn: " + JSON.stringify(data));
       if (pendingResolve) {
         pendingResolve(data);
         pendingResolve = null;
       }
     };
 
-    debugLog("Posting getAuthCode to mini-program...");
+    // debugLog("Posting getAuthCode to mini-program...");
     my.postMessage({ action: { type: "getAuthCode" } });
   });
 }
@@ -177,41 +177,41 @@ export function initiateVodaPayPayment(amountInCents: number): Promise<{ success
 
     const paymentRequestId = generatePaymentRequestId();
 
-    debugLog("initiateVodaPayPayment called");
-    debugLog("amount (cents): " + amountInCents);
-    debugLog("paymentRequestId: " + paymentRequestId);
+    // debugLog("initiateVodaPayPayment called");
+    // debugLog("amount (cents): " + amountInCents);
+    // debugLog("paymentRequestId: " + paymentRequestId);
 
     if (!my || typeof my.postMessage !== "function") {
-      debugLog("window.my not found — cannot process payment ❌");
+      // debugLog("window.my not found — cannot process payment ❌");
       reject(new Error("VodaPay not available"));
       return;
     }
 
     const timer = setTimeout(() => {
       pendingResolve = null;
-      debugLog("Payment TIMED OUT ❌");
+      // debugLog("Payment TIMED OUT ❌");
       reject(new Error("VodaPay payment timed out"));
     }, 60_000);
 
     pendingResolve = (data: any) => {
       if (data?.action?.type === "PaymentResult") {
         clearTimeout(timer);
-        debugLog("Payment result: " + JSON.stringify(data.action.details));
+        // debugLog("Payment result: " + JSON.stringify(data.action.details));
         resolve({ success: true, result: data.action.details });
       } else {
-        debugLog("Unexpected action during payment: " + JSON.stringify(data?.action?.type));
+        // debugLog("Unexpected action during payment: " + JSON.stringify(data?.action?.type));
       }
     };
 
     my.onMessage = (data: any) => {
-      debugLog("onMessage fired inside payment: " + JSON.stringify(data));
+      // debugLog("onMessage fired inside payment: " + JSON.stringify(data));
       if (pendingResolve) {
         pendingResolve(data);
         pendingResolve = null;
       }
     };
 
-    debugLog("Posting Payment to mini-program...");
+    // debugLog("Posting Payment to mini-program...");
     my.postMessage({
       action: {
         type: "Payment",
