@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { ArrowUp, Sparkles, TrendingUp, Bot, Send, LogOut, Plus, Wallet, Settings, Star } from "lucide-react";
-import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
+import { ArrowUp, Sparkles, TrendingUp, Bot, Send, LogOut, Plus, Wallet, Settings, Layers } from "lucide-react";
+import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, PieChart, Pie, Cell, Legend } from "recharts";
 import { useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -16,22 +16,26 @@ export const Route = createFileRoute("/_authenticated/")({
   component: Index,
 });
 
-type Range = "1m" | "2m" | "3m" | "1y" | "max";
+type Range = "1D" | "1W" | "1M" | "3M" | "1Y";
 
-const seriesByRange: Record<Range, { label: string; v: number }[]> = {
-  "1m": gen(30, 140000, 0.02),
-  "2m": gen(60, 130000, 0.025),
-  "3m": gen(90, 120000, 0.03),
-  "1y": gen(52, 90000, 0.04),
-  max: gen(60, 50000, 0.06),
+const rangeConfig: Record<Range, { points: number; vol: number; label: string }> = {
+  "1D": { points: 24, vol: 0.004, label: "today" },
+  "1W": { points: 28, vol: 0.012, label: "this week" },
+  "1M": { points: 30, vol: 0.025, label: "this month" },
+  "3M": { points: 60, vol: 0.04, label: "last 3 months" },
+  "1Y": { points: 52, vol: 0.08, label: "this year" },
 };
 
-function gen(n: number, start: number, vol: number) {
-  let v = start;
-  return Array.from({ length: n }, (_, i) => {
-    v = v * (1 + (Math.sin(i / 3) * 0.4 + 0.6) * vol * 0.4 + (Math.random() - 0.3) * vol * 0.2);
-    return { label: `${i}`, v: Math.round(v) };
-  });
+function gen(n: number, end: number, vol: number, seed: number) {
+  // walk backwards from current value so the line ends at `end`
+  const out: { label: string; v: number }[] = [];
+  let v = end;
+  for (let i = 0; i < n; i++) {
+    out.push({ label: `${i}`, v: Math.round(v) });
+    const r = Math.sin((i + seed) * 1.3) * 0.5 + (((i * 9301 + 49297) % 233280) / 233280 - 0.5);
+    v = v / (1 + r * vol);
+  }
+  return out.reverse();
 }
 
 type Purchase = {
@@ -39,7 +43,7 @@ type Purchase = {
   amount: number;
   units: number;
   created_at: string;
-  instruments: { name: string; category: string; expected_return: number } | null;
+  instruments: { id: string; name: string; category: string; expected_return: number; price: number } | null;
 };
 
 const aiInsights = [
@@ -48,18 +52,28 @@ const aiInsights = [
   { title: "Tax-smart move", body: "You have R8.5k of TFSA room left this tax year. Allocating now could shield future Equities gains." },
 ];
 
+const PIE_COLORS = [
+  "oklch(0.72 0.19 150)",
+  "oklch(0.68 0.18 250)",
+  "oklch(0.75 0.17 60)",
+  "oklch(0.7 0.2 320)",
+  "oklch(0.72 0.18 20)",
+  "oklch(0.7 0.15 190)",
+  "oklch(0.75 0.16 110)",
+];
+
 function Index() {
-  const [range, setRange] = useState<Range>("1m");
-  const data = useMemo(() => seriesByRange[range], [range]);
+  const [range, setRange] = useState<Range>("1M");
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [loadingP, setLoadingP] = useState(true);
+  const [activeSlice, setActiveSlice] = useState<string | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
     (async () => {
       const { data, error } = await supabase
         .from("purchases")
-        .select("id, amount, units, created_at, instruments(name, category, expected_return)")
+        .select("id, amount, units, created_at, instruments(id, name, category, expected_return, price)")
         .order("created_at", { ascending: false });
       if (!error && data) setPurchases(data as unknown as Purchase[]);
       setLoadingP(false);
@@ -67,10 +81,31 @@ function Index() {
   }, []);
 
   const totalInvested = purchases.reduce((s, p) => s + Number(p.amount), 0);
-  const baseValue = 221500;
-  const totalValue = baseValue + totalInvested;
-  const plValue = 80500 + totalInvested * 0.05;
-  const plPct = totalValue > 0 ? ((plValue / (totalValue - plValue)) * 100).toFixed(1) : "0";
+  const baseValue = totalInvested > 0 ? 0 : 0;
+  const totalValue = baseValue + totalInvested * 1.05;
+
+  const cfg = rangeConfig[range];
+  const data = useMemo(() => gen(cfg.points, Math.max(totalValue, 1000), cfg.vol, range.charCodeAt(0)), [range, totalValue, cfg.points, cfg.vol]);
+  const periodStart = data[0]?.v ?? totalValue;
+  const periodEnd = data[data.length - 1]?.v ?? totalValue;
+  const periodChange = periodEnd - periodStart;
+  const periodPct = periodStart > 0 ? (periodChange / periodStart) * 100 : 0;
+  const positive = periodChange >= 0;
+
+  // Allocation by instrument (current value = amount * (1 + expected_return/100))
+  const allocation = useMemo(() => {
+    const map = new Map<string, { name: string; value: number; invested: number }>();
+    for (const p of purchases) {
+      const name = p.instruments?.name ?? "Other";
+      const val = Number(p.amount) * (1 + Number(p.instruments?.expected_return ?? 0) / 100);
+      const cur = map.get(name) ?? { name, value: 0, invested: 0 };
+      cur.value += val;
+      cur.invested += Number(p.amount);
+      map.set(name, cur);
+    }
+    return Array.from(map.values()).sort((a, b) => b.value - a.value);
+  }, [purchases]);
+  const allocTotal = allocation.reduce((s, a) => s + a.value, 0);
 
   const logout = async () => {
     await supabase.auth.signOut();
@@ -80,7 +115,6 @@ function Index() {
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-10">
-      {/* Hero */}
       <div className="px-5 pt-6 pb-10 bg-[var(--gradient-hero)]">
         <div className="mx-auto max-w-xl">
           <header className="flex items-center justify-between">
@@ -91,6 +125,9 @@ function Index() {
               <h1 className="text-lg font-semibold">SmartInVest</h1>
             </div>
             <div className="flex items-center gap-2">
+              <Link to="/basket" className="rounded-full bg-secondary px-3 py-1.5 text-sm font-semibold inline-flex items-center gap-1 hover:bg-muted transition" aria-label="Build basket">
+                <Layers className="size-4" /> Basket
+              </Link>
               <Link to="/invest" className="rounded-full bg-primary text-primary-foreground px-3 py-1.5 text-sm font-semibold inline-flex items-center gap-1 hover:opacity-90 transition">
                 <Plus className="size-4" /> Invest
               </Link>
@@ -107,47 +144,36 @@ function Index() {
             <p className="text-sm text-muted-foreground">Total Value</p>
             <div className="mt-2 flex items-center justify-center gap-2">
               <h2 className="text-5xl font-bold tracking-tight">R{Math.round(totalValue).toLocaleString()}</h2>
-              <ArrowUp className="size-7 text-primary" />
+              <ArrowUp className={cn("size-7", positive ? "text-primary" : "text-destructive rotate-180")} />
             </div>
+            <p className={cn("text-sm mt-2 font-medium", positive ? "text-primary" : "text-destructive")}>
+              {positive ? "+" : ""}R{Math.round(periodChange).toLocaleString()} ({positive ? "+" : ""}{periodPct.toFixed(2)}%) {cfg.label}
+            </p>
           </div>
 
-          <div className="mt-8 grid grid-cols-2 divide-x divide-border">
-            <div className="pr-4">
-              <p className="text-xs text-muted-foreground">Profit &amp; Loss</p>
-              <p className="text-xl font-bold mt-1">{plPct}<span className="text-sm">%</span></p>
-            </div>
-            <div className="pl-4 text-right">
-              <p className="text-xs text-muted-foreground">Profit &amp; Loss Value</p>
-              <p className="text-xl font-bold mt-1">R{Math.round(plValue).toLocaleString()}</p>
-            </div>
+          <div className="mt-6 inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-xs text-primary mx-auto">
+            <Sparkles className="size-3" /> Fractional shares from R50 — own a piece of any stock
           </div>
         </div>
       </div>
 
-
       <div className="mx-auto max-w-xl px-5 -mt-6 space-y-5">
-        {/* Chart card */}
+        {/* Performance chart */}
         <section className="bg-card rounded-3xl p-5 shadow-[var(--shadow-glow)]">
-          <h3 className="font-semibold">SmartInVest Value Over Time</h3>
-          <div className="mt-4 grid grid-cols-2 divide-x divide-border">
-            <div className="pr-4">
-              <p className="text-xs text-muted-foreground">1 m change</p>
-              <p className="mt-1 flex items-center gap-1 font-bold text-primary"><ArrowUp className="size-4" />3.5%</p>
-            </div>
-            <div className="pl-4">
-              <p className="text-xs text-muted-foreground">daily change</p>
-              <p className="mt-1 font-bold">0.7%</p>
-            </div>
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold">Portfolio performance</h3>
+            <span className={cn("text-xs font-semibold", positive ? "text-primary" : "text-destructive")}>
+              {positive ? "▲" : "▼"} {Math.abs(periodPct).toFixed(2)}%
+            </span>
           </div>
 
-          <p className="text-xs text-muted-foreground mt-5">Growth in Rand</p>
-          <div className="h-56 mt-2">
+          <div className="h-56 mt-4">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={data} margin={{ top: 10, right: 0, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="oklch(0.72 0.19 150)" stopOpacity={0.5} />
-                    <stop offset="100%" stopColor="oklch(0.72 0.19 150)" stopOpacity={0} />
+                    <stop offset="0%" stopColor={positive ? "oklch(0.72 0.19 150)" : "oklch(0.65 0.22 25)"} stopOpacity={0.5} />
+                    <stop offset="100%" stopColor={positive ? "oklch(0.72 0.19 150)" : "oklch(0.65 0.22 25)"} stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <XAxis dataKey="label" hide />
@@ -156,28 +182,109 @@ function Index() {
                   labelFormatter={() => ""}
                   formatter={(v: number) => [`R${v.toLocaleString()}`, "Value"]}
                 />
-                <Area type="monotone" dataKey="v" stroke="oklch(0.72 0.19 150)" strokeWidth={2} fill="url(#g)" />
+                <Area type="monotone" dataKey="v" stroke={positive ? "oklch(0.72 0.19 150)" : "oklch(0.65 0.22 25)"} strokeWidth={2} fill="url(#g)" />
               </AreaChart>
             </ResponsiveContainer>
           </div>
-          <div className="flex justify-between text-xs text-muted-foreground px-1">
-            <span>13 Jul</span><span>28 Jul</span><span>13 Aug</span>
-          </div>
 
-          <div className="mt-5 flex items-center justify-between bg-background/40 rounded-full p-1">
-            {(["1m", "2m", "3m", "1y", "max"] as Range[]).map((r) => (
+          <div className="mt-4 flex items-center justify-between bg-background/40 rounded-full p-1">
+            {(["1D", "1W", "1M", "3M", "1Y"] as Range[]).map((r) => (
               <button
                 key={r}
                 onClick={() => setRange(r)}
+                aria-pressed={range === r}
                 className={cn(
                   "flex-1 text-sm py-2 rounded-full transition font-medium",
-                  range === r ? "bg-secondary text-foreground" : "text-muted-foreground hover:text-foreground"
+                  range === r ? "bg-primary text-primary-foreground shadow" : "text-muted-foreground hover:text-foreground"
                 )}
               >
                 {r}
               </button>
             ))}
           </div>
+        </section>
+
+        {/* Allocation pie */}
+        <section className="bg-card rounded-3xl p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-semibold">Portfolio allocation</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">How your money is split across holdings</p>
+            </div>
+            <Link to="/basket" className="text-xs text-primary font-medium hover:underline inline-flex items-center gap-1">
+              <Layers className="size-3" /> Diversify
+            </Link>
+          </div>
+
+          {loadingP ? (
+            <div className="h-56 mt-4 animate-pulse rounded-2xl bg-background/40" />
+          ) : allocation.length === 0 ? (
+            <div className="mt-4 rounded-2xl border border-dashed border-border p-8 text-center">
+              <p className="text-sm text-muted-foreground">Make your first investment to see your allocation breakdown.</p>
+            </div>
+          ) : (
+            <>
+              <div className="h-56 mt-2">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={allocation}
+                      dataKey="value"
+                      nameKey="name"
+                      innerRadius={50}
+                      outerRadius={80}
+                      paddingAngle={2}
+                      onClick={(d: any) => setActiveSlice(activeSlice === d.name ? null : d.name)}
+                    >
+                      {allocation.map((a, i) => (
+                        <Cell
+                          key={a.name}
+                          fill={PIE_COLORS[i % PIE_COLORS.length]}
+                          stroke="transparent"
+                          opacity={activeSlice && activeSlice !== a.name ? 0.35 : 1}
+                          style={{ cursor: "pointer" }}
+                        />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      contentStyle={{ background: "oklch(0.23 0.035 260)", border: "1px solid oklch(0.3 0.04 260)", borderRadius: 12, color: "white" }}
+                      formatter={(v: number, _n, p: any) => [`R${Math.round(v).toLocaleString()} (${((v / allocTotal) * 100).toFixed(1)}%)`, p.payload.name]}
+                    />
+                    <Legend
+                      verticalAlign="bottom"
+                      iconType="circle"
+                      wrapperStyle={{ fontSize: 11, color: "oklch(0.7 0.02 260)" }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <ul className="mt-2 space-y-2">
+                {allocation.map((a, i) => {
+                  const pct = (a.value / allocTotal) * 100;
+                  const isActive = activeSlice === a.name;
+                  return (
+                    <li
+                      key={a.name}
+                      onClick={() => setActiveSlice(isActive ? null : a.name)}
+                      className={cn(
+                        "flex items-center justify-between rounded-xl px-3 py-2 cursor-pointer transition",
+                        isActive ? "bg-primary/10 border border-primary/30" : "bg-background/30 hover:bg-background/50"
+                      )}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="size-2.5 rounded-full shrink-0" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
+                        <span className="text-sm font-medium truncate">{a.name}</span>
+                      </div>
+                      <div className="text-right shrink-0 ml-3">
+                        <p className="text-sm font-semibold">R{Math.round(a.value).toLocaleString()}</p>
+                        <p className="text-[10px] text-muted-foreground">{pct.toFixed(1)}% · invested R{Math.round(a.invested).toLocaleString()}</p>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          )}
         </section>
 
         {/* AI Insights */}
@@ -205,7 +312,7 @@ function Index() {
           <AIChat />
         </section>
 
-        {/* Investments */}
+        {/* Investments list */}
         <section>
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-xl font-bold">Your investments</h3>
@@ -218,7 +325,7 @@ function Index() {
             <Link to="/invest" className="block bg-card rounded-2xl p-6 text-center border border-dashed border-border hover:border-primary transition">
               <Wallet className="size-6 text-primary mx-auto mb-2" />
               <p className="font-semibold">No investments yet</p>
-              <p className="text-sm text-muted-foreground mt-1">Browse instruments and make your first purchase</p>
+              <p className="text-sm text-muted-foreground mt-1">Start with as little as R50 — fractional shares supported</p>
             </Link>
           ) : (
             <div className="space-y-3">
@@ -239,7 +346,7 @@ function Index() {
                       <div>
                         <p className="text-xs text-muted-foreground">Invested</p>
                         <p className="font-bold mt-1">R{Number(p.amount).toLocaleString()}</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">{Number(p.units).toFixed(4)} units</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">{Number(p.units).toFixed(4)} shares</p>
                       </div>
                       <div className="text-right">
                         <p className="text-xs text-muted-foreground">Projected P&amp;L</p>
@@ -311,5 +418,5 @@ function respond(q: string): string {
   if (s.includes("crypto")) return "Crypto is +65% (R6.5k). Trimming ~20% would lock in gains and bring allocation back near your 10% target.";
   if (s.includes("risk")) return "Portfolio risk is moderate-high. Crypto and Equities drive 78% of volatility. Diversifying into ETFs would lower drawdown.";
   if (s.includes("buy") || s.includes("invest")) return "Based on momentum and your gaps, broad-market ETFs (e.g. Top 40) look attractive for new contributions.";
-  return "Your portfolio is +65% YTD at R221.5k. Strongest: Crypto +65%. Weakest: Unit Trusts -2%. Want a rebalancing plan?";
+  return "Your portfolio is +65% YTD. Strongest: Crypto. Weakest: Unit Trusts. Want a rebalancing plan?";
 }
