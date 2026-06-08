@@ -15,6 +15,7 @@ import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 import { Route as AuthenticatedPreferencesRouteImport } from './routes/_authenticated/preferences'
 import { Route as AuthenticatedInvestRouteImport } from './routes/_authenticated/invest'
+import { Route as AuthenticatedBasketRouteImport } from './routes/_authenticated/basket'
 
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
@@ -46,17 +47,24 @@ const AuthenticatedInvestRoute = AuthenticatedInvestRouteImport.update({
   path: '/invest',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedBasketRoute = AuthenticatedBasketRouteImport.update({
+  id: '/basket',
+  path: '/basket',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
   '/consent': typeof ConsentRoute
   '/login': typeof LoginRoute
+  '/basket': typeof AuthenticatedBasketRoute
   '/invest': typeof AuthenticatedInvestRoute
   '/preferences': typeof AuthenticatedPreferencesRoute
 }
 export interface FileRoutesByTo {
   '/consent': typeof ConsentRoute
   '/login': typeof LoginRoute
+  '/basket': typeof AuthenticatedBasketRoute
   '/invest': typeof AuthenticatedInvestRoute
   '/preferences': typeof AuthenticatedPreferencesRoute
   '/': typeof AuthenticatedIndexRoute
@@ -66,20 +74,28 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/consent': typeof ConsentRoute
   '/login': typeof LoginRoute
+  '/_authenticated/basket': typeof AuthenticatedBasketRoute
   '/_authenticated/invest': typeof AuthenticatedInvestRoute
   '/_authenticated/preferences': typeof AuthenticatedPreferencesRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/consent' | '/login' | '/invest' | '/preferences'
+  fullPaths:
+    | '/'
+    | '/consent'
+    | '/login'
+    | '/basket'
+    | '/invest'
+    | '/preferences'
   fileRoutesByTo: FileRoutesByTo
-  to: '/consent' | '/login' | '/invest' | '/preferences' | '/'
+  to: '/consent' | '/login' | '/basket' | '/invest' | '/preferences' | '/'
   id:
     | '__root__'
     | '/_authenticated'
     | '/consent'
     | '/login'
+    | '/_authenticated/basket'
     | '/_authenticated/invest'
     | '/_authenticated/preferences'
     | '/_authenticated/'
@@ -135,16 +151,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedInvestRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/basket': {
+      id: '/_authenticated/basket'
+      path: '/basket'
+      fullPath: '/basket'
+      preLoaderRoute: typeof AuthenticatedBasketRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
   }
 }
 
 interface AuthenticatedRouteChildren {
+  AuthenticatedBasketRoute: typeof AuthenticatedBasketRoute
   AuthenticatedInvestRoute: typeof AuthenticatedInvestRoute
   AuthenticatedPreferencesRoute: typeof AuthenticatedPreferencesRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
+  AuthenticatedBasketRoute: AuthenticatedBasketRoute,
   AuthenticatedInvestRoute: AuthenticatedInvestRoute,
   AuthenticatedPreferencesRoute: AuthenticatedPreferencesRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,

@@ -271,13 +271,17 @@ const amountSchema = z
   .max(10_000_000, "Amount too large");
 
 function PurchaseSheet({ instrument, onClose }: { instrument: InstrumentLite; onClose: () => void }) {
+  const [mode, setMode] = useState<"zar" | "shares">("zar");
   const [amount, setAmount] = useState<string>("1000");
+  const [sharesInput, setSharesInput] = useState<string>("1");
   const [submitting, setSubmitting] = useState(false);
   const navigate = useNavigate();
 
-  const num = parseFloat(amount) || 0;
-  const units = num / Number(instrument.price);
+  const price = Number(instrument.price);
+  const num = mode === "zar" ? (parseFloat(amount) || 0) : (parseFloat(sharesInput) || 0) * price;
+  const units = num / price;
   const projected = num * (1 + Number(instrument.expected_return) / 100);
+  const isFractional = units > 0 && units < 1;
 
   const buy = async () => {
     const parsed = amountSchema.safeParse(num);
@@ -301,11 +305,11 @@ function PurchaseSheet({ instrument, onClose }: { instrument: InstrumentLite; on
         user_id: u.user.id,
         instrument_id: instrument.id,
         amount: num,
-        units: Number(units.toFixed(4)),
+        units: Number(units.toFixed(6)),
       });
       if (error) throw error;
 
-      toast.success(`Purchased R${num.toLocaleString()} of ${instrument.name}`);
+      toast.success(`Purchased ${units.toFixed(4)} shares of ${instrument.name}`);
       navigate({ to: "/" });
     } catch (err: any) {
       toast.error(err.message ?? "Purchase failed");
@@ -325,33 +329,77 @@ function PurchaseSheet({ instrument, onClose }: { instrument: InstrumentLite; on
         <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{instrument.description}</p>
 
         <div className="grid grid-cols-3 gap-2 mt-5">
-          <Stat label="Unit price" value={`R${Number(instrument.price).toLocaleString()}`} />
+          <Stat label="Share price" value={`R${price.toLocaleString()}`} />
           <Stat label="Return" value={`+${instrument.expected_return}%`} accent />
           <Stat label="Risk" value={instrument.risk_level} />
         </div>
 
-        <div className="mt-6">
-          <label className="block text-xs text-muted-foreground ml-3">Amount (ZAR)</label>
-          <input
-            type="number"
-            value={amount}
-            min={50}
-            step="50"
-            onChange={(e) => setAmount(e.target.value)}
-            className="w-full mt-1 bg-transparent border border-border rounded-full px-4 py-3 text-lg font-semibold outline-none focus:border-primary"
-          />
-          <div className="flex gap-2 mt-3">
-            {[500, 1000, 5000, 10000].map((v) => (
-              <button key={v} onClick={() => setAmount(String(v))}
-                className="flex-1 text-xs py-2 rounded-full bg-secondary hover:bg-muted transition">
-                R{v.toLocaleString()}
-              </button>
-            ))}
-          </div>
+        <div className="mt-5 inline-flex items-center gap-1 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-[10px] text-primary">
+          <Sparkles className="size-3" /> Fractional shares supported — invest from R50
         </div>
 
+        <div className="mt-4 flex bg-background/40 rounded-full p-1">
+          <button
+            onClick={() => setMode("zar")}
+            className={cn("flex-1 text-xs py-2 rounded-full font-medium transition", mode === "zar" ? "bg-primary text-primary-foreground" : "text-muted-foreground")}
+          >
+            By amount (ZAR)
+          </button>
+          <button
+            onClick={() => setMode("shares")}
+            className={cn("flex-1 text-xs py-2 rounded-full font-medium transition", mode === "shares" ? "bg-primary text-primary-foreground" : "text-muted-foreground")}
+          >
+            By shares
+          </button>
+        </div>
+
+        {mode === "zar" ? (
+          <div className="mt-3">
+            <label className="block text-xs text-muted-foreground ml-3">Amount (ZAR)</label>
+            <input
+              type="number"
+              value={amount}
+              min={50}
+              step="50"
+              onChange={(e) => setAmount(e.target.value)}
+              className="w-full mt-1 bg-transparent border border-border rounded-full px-4 py-3 text-lg font-semibold outline-none focus:border-primary"
+            />
+            <div className="flex gap-2 mt-3">
+              {[50, 500, 1000, 5000].map((v) => (
+                <button key={v} onClick={() => setAmount(String(v))}
+                  className="flex-1 text-xs py-2 rounded-full bg-secondary hover:bg-muted transition">
+                  R{v.toLocaleString()}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="mt-3">
+            <label className="block text-xs text-muted-foreground ml-3">Shares (fractions allowed)</label>
+            <input
+              type="number"
+              value={sharesInput}
+              min={0}
+              step="0.0001"
+              onChange={(e) => setSharesInput(e.target.value)}
+              className="w-full mt-1 bg-transparent border border-border rounded-full px-4 py-3 text-lg font-semibold outline-none focus:border-primary"
+            />
+            <div className="flex gap-2 mt-3">
+              {[0.1, 0.5, 1, 5].map((v) => (
+                <button key={v} onClick={() => setSharesInput(String(v))}
+                  className="flex-1 text-xs py-2 rounded-full bg-secondary hover:bg-muted transition">
+                  {v} {v < 1 && "share"}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="mt-5 rounded-2xl bg-background/40 border border-border p-4 space-y-2 text-sm">
-          <Row label="You'll receive" value={`${units.toFixed(4)} units`} />
+          <Row label={mode === "zar" ? "Shares you'll own" : "Cost"} value={mode === "zar" ? `${units.toFixed(4)} shares` : `R${num.toFixed(2)}`} />
+          {isFractional && (
+            <Row label="Ownership" value={`${(units * 100).toFixed(2)}% of 1 share`} />
+          )}
           <Row label="Projected value (1y)" value={`R${Math.round(projected).toLocaleString()}`} accent />
         </div>
 
