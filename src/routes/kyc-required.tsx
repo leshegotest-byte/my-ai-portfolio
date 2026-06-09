@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ShieldAlert, ArrowRight } from "lucide-react";
-import { readPendingUser, clearPendingUser, requestKycUpgrade } from "@/lib/vodapay";
+import { readPendingUser, clearPendingUser, requestKycUpgrade, kycLabel } from "@/lib/vodapay";
 
 export const Route = createFileRoute("/kyc-required")({
   validateSearch: (s) => ({ redirect: (s.redirect as string) || "/" }),
