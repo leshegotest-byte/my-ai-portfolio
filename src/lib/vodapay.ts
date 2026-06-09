@@ -1,3 +1,15 @@
+export const KYC_LABELS: Record<string, string> = {
+  "00": "Entry",
+  "01": "Lite",
+  "02": "Essential",
+  "03": "Prod",
+};
+
+export function kycLabel(level?: string): string {
+  if (!level) return "—";
+  return KYC_LABELS[level] ?? level;
+}
+
 export type VodaPayUserInfo = {
   nickName?: string;
   contactInfos?: { contactType: string; contactNo: string }[];
