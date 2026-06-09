@@ -3,8 +3,22 @@ export type VodaPayUserInfo = {
   contactInfos?: { contactType: string; contactNo: string }[];
   userName?: { firstName?: string; lastName?: string; fullName?: string };
   userId: string;
+  kycLevel?: string;
   loginIdInfos?: { loginIdType: string; loginId: string; maskLoginId?: string; hashLoginId?: string }[];
 };
+
+/**
+ * Ask the VodaPay mini-program to launch its KYC upgrade flow.
+ * Fires the `kycLevel` action so the host app can take the user to Pro Wallet KYC.
+ */
+export function requestKycUpgrade(): void {
+  const my = typeof window !== "undefined" ? window.my : undefined;
+  if (!my || typeof my.postMessage !== "function") {
+    console.warn("VodaPay not available — cannot request KYC upgrade");
+    return;
+  }
+  my.postMessage({ action: { type: "kycLevel" } });
+}
 
 declare global {
   interface Window {
