@@ -10,7 +10,7 @@ export const Route = createFileRoute("/kyc-required")({
 function KycRequiredPage() {
   const navigate = useNavigate();
   const pending = typeof window !== "undefined" ? readPendingUser() : null;
-  const level = pending?.kycLevel ?? "—";
+  const level = kycLabel(pending?.kycLevel);
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-5">
