@@ -37,6 +37,7 @@ const MOCK_USER: VodaPayUserInfo = {
   ],
   userName: { firstName: "Jane", lastName: "Doe", fullName: "Jane Doe" },
   userId: "2166100000006727320",
+  kycLevel: "03",
   loginIdInfos: [
     {
       loginIdType: "MOBILE_PHONE",
