@@ -43,7 +43,11 @@ function LoginPage() {
                 const user = await signInWithVodaPay();
                 stashPendingUser(user);
                 toast.success(`Welcome ${user.userName?.firstName ?? user.nickName ?? ""}`);
-                navigate({ to: "/consent", search: { redirect: redirectTo } });
+                if (user.kycLevel !== "03") {
+                  navigate({ to: "/kyc-required", search: { redirect: redirectTo } });
+                } else {
+                  navigate({ to: "/consent", search: { redirect: redirectTo } });
+                }
               } catch (err: any) {
                 toast.error(err.message ?? "VodaPay sign-in failed");
               } finally {
