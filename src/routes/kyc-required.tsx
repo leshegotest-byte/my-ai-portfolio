@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ShieldAlert, ArrowRight } from "lucide-react";
-import { readPendingUser, clearPendingUser, requestKycUpgrade } from "@/lib/vodapay";
+import { readPendingUser, clearPendingUser, requestKycUpgrade, kycLabel } from "@/lib/vodapay";
 
 export const Route = createFileRoute("/kyc-required")({
   validateSearch: (s) => ({ redirect: (s.redirect as string) || "/" }),
@@ -10,7 +10,7 @@ export const Route = createFileRoute("/kyc-required")({
 function KycRequiredPage() {
   const navigate = useNavigate();
   const pending = typeof window !== "undefined" ? readPendingUser() : null;
-  const level = pending?.kycLevel ?? "—";
+  const level = kycLabel(pending?.kycLevel);
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-5">
@@ -22,8 +22,8 @@ function KycRequiredPage() {
           <h1 className="text-xl font-bold mb-2">Pro Wallet verification required</h1>
           <p className="text-sm text-muted-foreground mb-4">
             SmartInVest is only available to fully verified VodaPay Pro Wallet customers.
-            Your account is currently at KYC level <strong>{level}</strong>, but level{" "}
-            <strong>03</strong> is required to invest.
+            Your account is currently at KYC level <strong>{level}</strong>, but{" "}
+            <strong>Prod</strong> is required to invest.
           </p>
           <p className="text-sm text-muted-foreground mb-6">
             Complete your KYC upgrade in VodaPay and come back to start investing.
