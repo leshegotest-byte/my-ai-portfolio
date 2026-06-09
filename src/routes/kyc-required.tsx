@@ -22,8 +22,8 @@ function KycRequiredPage() {
           <h1 className="text-xl font-bold mb-2">Pro Wallet verification required</h1>
           <p className="text-sm text-muted-foreground mb-4">
             SmartInVest is only available to fully verified VodaPay Pro Wallet customers.
-            Your account is currently at KYC level <strong>{level}</strong>, but level{" "}
-            <strong>03</strong> is required to invest.
+            Your account is currently at KYC level <strong>{level}</strong>, but{" "}
+            <strong>Prod</strong> is required to invest.
           </p>
           <p className="text-sm text-muted-foreground mb-6">
             Complete your KYC upgrade in VodaPay and come back to start investing.
