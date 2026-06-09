@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as KycRequiredRouteImport } from './routes/kyc-required'
 import { Route as ConsentRouteImport } from './routes/consent'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
@@ -20,6 +21,11 @@ import { Route as AuthenticatedBasketRouteImport } from './routes/_authenticated
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const KycRequiredRoute = KycRequiredRouteImport.update({
+  id: '/kyc-required',
+  path: '/kyc-required',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ConsentRoute = ConsentRouteImport.update({
@@ -56,6 +62,7 @@ const AuthenticatedBasketRoute = AuthenticatedBasketRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
   '/consent': typeof ConsentRoute
+  '/kyc-required': typeof KycRequiredRoute
   '/login': typeof LoginRoute
   '/basket': typeof AuthenticatedBasketRoute
   '/invest': typeof AuthenticatedInvestRoute
@@ -63,6 +70,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/consent': typeof ConsentRoute
+  '/kyc-required': typeof KycRequiredRoute
   '/login': typeof LoginRoute
   '/basket': typeof AuthenticatedBasketRoute
   '/invest': typeof AuthenticatedInvestRoute
@@ -73,6 +81,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/consent': typeof ConsentRoute
+  '/kyc-required': typeof KycRequiredRoute
   '/login': typeof LoginRoute
   '/_authenticated/basket': typeof AuthenticatedBasketRoute
   '/_authenticated/invest': typeof AuthenticatedInvestRoute
@@ -84,16 +93,25 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/consent'
+    | '/kyc-required'
     | '/login'
     | '/basket'
     | '/invest'
     | '/preferences'
   fileRoutesByTo: FileRoutesByTo
-  to: '/consent' | '/login' | '/basket' | '/invest' | '/preferences' | '/'
+  to:
+    | '/consent'
+    | '/kyc-required'
+    | '/login'
+    | '/basket'
+    | '/invest'
+    | '/preferences'
+    | '/'
   id:
     | '__root__'
     | '/_authenticated'
     | '/consent'
+    | '/kyc-required'
     | '/login'
     | '/_authenticated/basket'
     | '/_authenticated/invest'
@@ -104,6 +122,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   ConsentRoute: typeof ConsentRoute
+  KycRequiredRoute: typeof KycRequiredRoute
   LoginRoute: typeof LoginRoute
 }
 
@@ -114,6 +133,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/kyc-required': {
+      id: '/kyc-required'
+      path: '/kyc-required'
+      fullPath: '/kyc-required'
+      preLoaderRoute: typeof KycRequiredRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/consent': {
@@ -182,6 +208,7 @@ const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
   ConsentRoute: ConsentRoute,
+  KycRequiredRoute: KycRequiredRoute,
   LoginRoute: LoginRoute,
 }
 export const routeTree = rootRouteImport
