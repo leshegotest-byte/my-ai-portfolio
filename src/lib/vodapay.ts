@@ -6,8 +6,8 @@ export const KYC_LABELS: Record<string, string> = {
 };
 
 export function kycLabel(level?: string): string {
-  if (!level) return "—";
-  return KYC_LABELS[level] ?? level;
+  if (!level) return "Entry";
+  return KYC_LABELS[level] ?? "Entry";
 }
 
 export type VodaPayUserInfo = {
