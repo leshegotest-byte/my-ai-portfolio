@@ -72,18 +72,70 @@ function Index() {
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [loadingP, setLoadingP] = useState(true);
   const [activeSlice, setActiveSlice] = useState<string | null>(null);
+  const [withdrawTarget, setWithdrawTarget] = useState<Purchase | null>(null);
+  const [withdrawing, setWithdrawing] = useState(false);
   const navigate = useNavigate();
 
+  const loadPurchases = async () => {
+    const { data, error } = await supabase
+      .from("purchases")
+      .select("id, amount, units, created_at, status, instrument_id, instruments(id, name, category, expected_return, price)")
+      .order("created_at", { ascending: false });
+    if (!error && data) setPurchases(data as unknown as Purchase[]);
+    setLoadingP(false);
+  };
+
   useEffect(() => {
-    (async () => {
-      const { data, error } = await supabase
-        .from("purchases")
-        .select("id, amount, units, created_at, instruments(id, name, category, expected_return, price)")
-        .order("created_at", { ascending: false });
-      if (!error && data) setPurchases(data as unknown as Purchase[]);
-      setLoadingP(false);
-    })();
+    loadPurchases();
   }, []);
+
+  // Pair each withdrawal row with the matching buy (same instrument, matching amount) so we can hide sold-out buys.
+  const withdrawnBuyIds = useMemo(() => {
+    const paired = new Set<string>();
+    const withdrawals = purchases.filter((p) => p.status === "withdrawn");
+    const buys = purchases.filter((p) => p.status !== "withdrawn");
+    for (const w of withdrawals) {
+      const match = buys.find(
+        (b) => b.instrument_id === w.instrument_id && !paired.has(b.id) && Math.abs(Number(b.amount) + Number(w.amount)) < 0.01,
+      );
+      if (match) paired.add(match.id);
+    }
+    return paired;
+  }, [purchases]);
+
+  const activeBuys = useMemo(
+    () => purchases.filter((p) => p.status !== "withdrawn" && !withdrawnBuyIds.has(p.id)),
+    [purchases, withdrawnBuyIds],
+  );
+
+  const withdrawalRows = useMemo(() => purchases.filter((p) => p.status === "withdrawn"), [purchases]);
+
+  const confirmWithdraw = async () => {
+    if (!withdrawTarget) return;
+    setWithdrawing(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      toast.error("Please sign in again");
+      setWithdrawing(false);
+      return;
+    }
+    const { error } = await supabase.from("purchases").insert({
+      user_id: user.id,
+      instrument_id: withdrawTarget.instrument_id,
+      amount: -Number(withdrawTarget.amount),
+      units: -Number(withdrawTarget.units),
+      status: "withdrawn",
+    });
+    setWithdrawing(false);
+    if (error) {
+      toast.error("Withdrawal failed");
+      return;
+    }
+    toast.success(`Withdrew R${Number(withdrawTarget.amount).toLocaleString()} from ${withdrawTarget.instruments?.name ?? "investment"}`);
+    setWithdrawTarget(null);
+    await loadPurchases();
+  };
+
 
   const totalInvested = purchases.reduce((s, p) => s + Number(p.amount), 0);
   const baseValue = totalInvested > 0 ? 0 : 0;
