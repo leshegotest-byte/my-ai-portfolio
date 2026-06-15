@@ -160,7 +160,7 @@ function Index() {
       cur.invested += Number(p.amount);
       map.set(name, cur);
     }
-    return Array.from(map.values()).sort((a, b) => b.value - a.value);
+    return Array.from(map.values()).filter((a) => a.value > 0.01).sort((a, b) => b.value - a.value);
   }, [purchases]);
   const allocTotal = allocation.reduce((s, a) => s + a.value, 0);
 
