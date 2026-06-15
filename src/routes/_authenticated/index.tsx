@@ -378,15 +378,15 @@ function Index() {
 
           {loadingP ? (
             <div className="bg-card rounded-2xl p-6 text-center text-sm text-muted-foreground">Loading…</div>
-          ) : purchases.length === 0 ? (
+          ) : activeBuys.length === 0 ? (
             <Link to="/invest" className="block bg-card rounded-2xl p-6 text-center border border-dashed border-border hover:border-primary transition">
               <Wallet className="size-6 text-primary mx-auto mb-2" />
-              <p className="font-semibold">No investments yet</p>
+              <p className="font-semibold">No active investments</p>
               <p className="text-sm text-muted-foreground mt-1">Start with as little as R50 — fractional shares supported</p>
             </Link>
           ) : (
             <div className="space-y-3">
-              {purchases.map((p) => {
+              {activeBuys.map((p) => {
                 const projected = Number(p.amount) * (1 + Number(p.instruments?.expected_return ?? 0) / 100);
                 const pl = projected - Number(p.amount);
                 const positive = pl >= 0;
@@ -414,13 +414,86 @@ function Index() {
                         </p>
                       </div>
                     </div>
+                    <button
+                      onClick={() => setWithdrawTarget(p)}
+                      className="mt-4 w-full inline-flex items-center justify-center gap-2 rounded-full bg-secondary hover:bg-muted transition text-sm font-semibold py-2.5"
+                    >
+                      <ArrowDownToLine className="size-4" /> Withdraw
+                    </button>
                   </div>
                 );
               })}
             </div>
           )}
         </section>
+
+        {/* Transaction history */}
+        {!loadingP && purchases.length > 0 && (
+          <section className="bg-card rounded-3xl p-5">
+            <div className="flex items-center gap-2 mb-3">
+              <History className="size-4 text-primary" />
+              <h3 className="font-semibold">Transaction history</h3>
+            </div>
+            <ul className="divide-y divide-border/60">
+              {purchases.map((p) => {
+                const isWithdrawal = p.status === "withdrawn";
+                const amt = Number(p.amount);
+                return (
+                  <li key={p.id} className="flex items-center justify-between py-2.5">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">
+                        {isWithdrawal ? "Withdrawal" : "Invest"} · {p.instruments?.name ?? "—"}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {new Date(p.created_at).toLocaleString()}
+                      </p>
+                    </div>
+                    <p className={cn("text-sm font-semibold shrink-0 ml-3", isWithdrawal ? "text-destructive" : "text-primary")}>
+                      {isWithdrawal ? "−" : "+"}R{Math.abs(amt).toLocaleString()}
+                    </p>
+                  </li>
+                );
+              })}
+            </ul>
+            {withdrawalRows.length > 0 && (
+              <p className="mt-3 text-[11px] text-muted-foreground">
+                Withdrawn funds are simulated — they reduce your balance but no payout is sent.
+              </p>
+            )}
+          </section>
+        )}
       </div>
+
+      <Dialog open={!!withdrawTarget} onOpenChange={(o) => !o && setWithdrawTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Withdraw investment</DialogTitle>
+            <DialogDescription>
+              You're about to withdraw your full position in{" "}
+              <span className="font-semibold text-foreground">{withdrawTarget?.instruments?.name ?? "this investment"}</span>.
+              The amount will be removed from your portfolio.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-2xl bg-secondary/40 p-4 my-2">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Withdrawal amount</span>
+              <span className="text-lg font-bold">R{Number(withdrawTarget?.amount ?? 0).toLocaleString()}</span>
+            </div>
+            <div className="flex items-center justify-between mt-1">
+              <span className="text-xs text-muted-foreground">Shares released</span>
+              <span className="text-xs">{Number(withdrawTarget?.units ?? 0).toFixed(4)}</span>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setWithdrawTarget(null)} disabled={withdrawing}>
+              Cancel
+            </Button>
+            <Button onClick={confirmWithdraw} disabled={withdrawing}>
+              {withdrawing ? "Processing…" : "Confirm withdrawal"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
