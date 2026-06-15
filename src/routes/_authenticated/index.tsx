@@ -46,6 +46,8 @@ type Purchase = {
   amount: number;
   units: number;
   created_at: string;
+  status: string;
+  instrument_id: string;
   instruments: { id: string; name: string; category: string; expected_return: number; price: number } | null;
 };
 
