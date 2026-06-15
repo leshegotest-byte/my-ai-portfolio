@@ -1,8 +1,11 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { ArrowUp, Sparkles, TrendingUp, Bot, Send, LogOut, Plus, Wallet, Settings, Layers } from "lucide-react";
+import { ArrowUp, Sparkles, TrendingUp, Bot, Send, LogOut, Plus, Wallet, Settings, Layers, ArrowDownToLine, History } from "lucide-react";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, PieChart, Pie, Cell, Legend } from "recharts";
 import { useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
