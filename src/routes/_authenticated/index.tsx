@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -30,7 +31,6 @@ const rangeConfig: Record<Range, { points: number; vol: number; label: string }>
 };
 
 function gen(n: number, end: number, vol: number, seed: number) {
-  // walk backwards from current value so the line ends at `end`
   const out: { label: string; v: number }[] = [];
   let v = end;
   for (let i = 0; i < n; i++) {
@@ -41,6 +41,7 @@ function gen(n: number, end: number, vol: number, seed: number) {
   return out.reverse();
 }
 
+type Instrument = { id: string; name: string; category: string; expected_return: number; price: number };
 type Purchase = {
   id: string;
   amount: number;
@@ -48,7 +49,25 @@ type Purchase = {
   created_at: string;
   status: string;
   instrument_id: string;
-  instruments: { id: string; name: string; category: string; expected_return: number; price: number } | null;
+  instruments: Instrument | null;
+};
+type Withdrawal = {
+  id: string;
+  amount: number;
+  units: number;
+  created_at: string;
+  instrument_id: string;
+  instruments: Instrument | null;
+};
+
+type Holding = {
+  instrument_id: string;
+  name: string;
+  category: string;
+  expected_return: number;
+  invested: number;   // net invested (after withdrawals)
+  units: number;      // net units
+  value: number;      // projected current value
 };
 
 const aiInsights = [
@@ -70,76 +89,65 @@ const PIE_COLORS = [
 function Index() {
   const [range, setRange] = useState<Range>("1M");
   const [purchases, setPurchases] = useState<Purchase[]>([]);
+  const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([]);
   const [loadingP, setLoadingP] = useState(true);
   const [activeSlice, setActiveSlice] = useState<string | null>(null);
-  const [withdrawTarget, setWithdrawTarget] = useState<Purchase | null>(null);
+  const [withdrawHolding, setWithdrawHolding] = useState<Holding | null>(null);
+  const [withdrawAmount, setWithdrawAmount] = useState<string>("");
   const [withdrawing, setWithdrawing] = useState(false);
   const navigate = useNavigate();
 
-  const loadPurchases = async () => {
-    const { data, error } = await supabase
-      .from("purchases")
-      .select("id, amount, units, created_at, status, instrument_id, instruments(id, name, category, expected_return, price)")
-      .order("created_at", { ascending: false });
-    if (!error && data) setPurchases(data as unknown as Purchase[]);
+  const loadData = async () => {
+    const [pRes, wRes] = await Promise.all([
+      supabase
+        .from("purchases")
+        .select("id, amount, units, created_at, status, instrument_id, instruments(id, name, category, expected_return, price)")
+        .order("created_at", { ascending: false }),
+      (supabase as any)
+        .from("withdrawals")
+        .select("id, amount, units, created_at, instrument_id, instruments(id, name, category, expected_return, price)")
+        .order("created_at", { ascending: false }),
+    ]);
+    if (!pRes.error && pRes.data) setPurchases(pRes.data as unknown as Purchase[]);
+    if (!wRes.error && wRes.data) setWithdrawals(wRes.data as unknown as Withdrawal[]);
     setLoadingP(false);
   };
 
   useEffect(() => {
-    loadPurchases();
+    loadData();
   }, []);
 
-  // Pair each withdrawal row with the matching buy (same instrument, matching amount) so we can hide sold-out buys.
-  const withdrawnBuyIds = useMemo(() => {
-    const paired = new Set<string>();
-    const withdrawals = purchases.filter((p) => p.status === "withdrawn");
-    const buys = purchases.filter((p) => p.status !== "withdrawn");
+  // Group holdings per instrument with net amounts after withdrawals
+  const holdings = useMemo<Holding[]>(() => {
+    const map = new Map<string, Holding>();
+    for (const p of purchases) {
+      if (!p.instruments) continue;
+      const key = p.instrument_id;
+      const cur = map.get(key) ?? {
+        instrument_id: key,
+        name: p.instruments.name,
+        category: p.instruments.category,
+        expected_return: Number(p.instruments.expected_return ?? 0),
+        invested: 0, units: 0, value: 0,
+      };
+      cur.invested += Number(p.amount);
+      cur.units += Number(p.units);
+      map.set(key, cur);
+    }
     for (const w of withdrawals) {
-      const match = buys.find(
-        (b) => b.instrument_id === w.instrument_id && !paired.has(b.id) && Math.abs(Number(b.amount) + Number(w.amount)) < 0.01,
-      );
-      if (match) paired.add(match.id);
+      const cur = map.get(w.instrument_id);
+      if (!cur) continue;
+      cur.invested -= Number(w.amount);
+      cur.units -= Number(w.units);
     }
-    return paired;
-  }, [purchases]);
-
-  const activeBuys = useMemo(
-    () => purchases.filter((p) => p.status !== "withdrawn" && !withdrawnBuyIds.has(p.id)),
-    [purchases, withdrawnBuyIds],
-  );
-
-  const withdrawalRows = useMemo(() => purchases.filter((p) => p.status === "withdrawn"), [purchases]);
-
-  const confirmWithdraw = async () => {
-    if (!withdrawTarget) return;
-    setWithdrawing(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      toast.error("Please sign in again");
-      setWithdrawing(false);
-      return;
+    for (const h of map.values()) {
+      h.value = h.invested * (1 + h.expected_return / 100);
     }
-    const { error } = await supabase.from("purchases").insert({
-      user_id: user.id,
-      instrument_id: withdrawTarget.instrument_id,
-      amount: -Number(withdrawTarget.amount),
-      units: -Number(withdrawTarget.units),
-      status: "withdrawn",
-    });
-    setWithdrawing(false);
-    if (error) {
-      toast.error("Withdrawal failed");
-      return;
-    }
-    toast.success(`Withdrew R${Number(withdrawTarget.amount).toLocaleString()} from ${withdrawTarget.instruments?.name ?? "investment"}`);
-    setWithdrawTarget(null);
-    await loadPurchases();
-  };
+    return Array.from(map.values()).filter((h) => h.invested > 0.01).sort((a, b) => b.value - a.value);
+  }, [purchases, withdrawals]);
 
-
-  const totalInvested = purchases.reduce((s, p) => s + Number(p.amount), 0);
-  const baseValue = totalInvested > 0 ? 0 : 0;
-  const totalValue = baseValue + totalInvested * 1.05;
+  const totalInvested = holdings.reduce((s, h) => s + h.invested, 0);
+  const totalValue = holdings.reduce((s, h) => s + h.value, 0);
 
   const cfg = rangeConfig[range];
   const data = useMemo(() => gen(cfg.points, Math.max(totalValue, 1000), cfg.vol, range.charCodeAt(0)), [range, totalValue, cfg.points, cfg.vol]);
@@ -149,26 +157,84 @@ function Index() {
   const periodPct = periodStart > 0 ? (periodChange / periodStart) * 100 : 0;
   const positive = periodChange >= 0;
 
-  // Allocation by instrument (current value = amount * (1 + expected_return/100))
-  const allocation = useMemo(() => {
-    const map = new Map<string, { name: string; value: number; invested: number }>();
-    for (const p of purchases) {
-      const name = p.instruments?.name ?? "Other";
-      const val = Number(p.amount) * (1 + Number(p.instruments?.expected_return ?? 0) / 100);
-      const cur = map.get(name) ?? { name, value: 0, invested: 0 };
-      cur.value += val;
-      cur.invested += Number(p.amount);
-      map.set(name, cur);
+  const allocTotal = holdings.reduce((s, h) => s + h.value, 0);
+
+  const openWithdrawForHolding = (h: Holding) => {
+    setWithdrawHolding(h);
+    setWithdrawAmount(h.invested.toFixed(2));
+  };
+
+  const openWithdrawForName = (name: string) => {
+    const h = holdings.find((x) => x.name === name);
+    if (h) openWithdrawForHolding(h);
+  };
+
+  const confirmWithdraw = async () => {
+    if (!withdrawHolding) return;
+    const amt = Number(withdrawAmount);
+    if (!Number.isFinite(amt) || amt <= 0) {
+      toast.error("Enter a valid amount");
+      return;
     }
-    return Array.from(map.values()).filter((a) => a.value > 0.01).sort((a, b) => b.value - a.value);
-  }, [purchases]);
-  const allocTotal = allocation.reduce((s, a) => s + a.value, 0);
+    if (amt > withdrawHolding.invested + 0.01) {
+      toast.error(`Max withdrawable is R${withdrawHolding.invested.toFixed(2)}`);
+      return;
+    }
+    setWithdrawing(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      toast.error("Please sign in again");
+      setWithdrawing(false);
+      return;
+    }
+    const ratio = amt / withdrawHolding.invested;
+    const unitsOut = withdrawHolding.units * ratio;
+    const { error } = await (supabase as any).from("withdrawals").insert({
+      user_id: user.id,
+      instrument_id: withdrawHolding.instrument_id,
+      amount: amt,
+      units: unitsOut,
+      status: "completed",
+    });
+    setWithdrawing(false);
+    if (error) {
+      toast.error("Withdrawal failed");
+      return;
+    }
+    toast.success(`Withdrew R${Math.round(amt).toLocaleString()} from ${withdrawHolding.name}`);
+    setWithdrawHolding(null);
+    setActiveSlice(null);
+    await loadData();
+  };
+
+  // Transaction history (buys + withdrawals)
+  const history = useMemo(() => {
+    const rows = [
+      ...purchases.map((p) => ({
+        id: `b-${p.id}`,
+        type: "buy" as const,
+        name: p.instruments?.name ?? "—",
+        amount: Number(p.amount),
+        created_at: p.created_at,
+      })),
+      ...withdrawals.map((w) => ({
+        id: `w-${w.id}`,
+        type: "withdraw" as const,
+        name: w.instruments?.name ?? "—",
+        amount: Number(w.amount),
+        created_at: w.created_at,
+      })),
+    ];
+    return rows.sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at));
+  }, [purchases, withdrawals]);
 
   const logout = async () => {
     await supabase.auth.signOut();
     toast.success("Signed out");
     navigate({ to: "/login", search: { redirect: "/" } });
   };
+
+  const activeHolding = activeSlice ? holdings.find((h) => h.name === activeSlice) : null;
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-10">
@@ -266,7 +332,7 @@ function Index() {
           <div className="flex items-center justify-between">
             <div>
               <h3 className="font-semibold">Portfolio allocation</h3>
-              <p className="text-xs text-muted-foreground mt-0.5">How your money is split across holdings</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Tap a slice to view & withdraw</p>
             </div>
             <Link to="/basket" className="text-xs text-primary font-medium hover:underline inline-flex items-center gap-1">
               <Layers className="size-3" /> Diversify
@@ -275,7 +341,7 @@ function Index() {
 
           {loadingP ? (
             <div className="h-56 mt-4 animate-pulse rounded-2xl bg-background/40" />
-          ) : allocation.length === 0 ? (
+          ) : holdings.length === 0 ? (
             <div className="mt-4 rounded-2xl border border-dashed border-border p-8 text-center">
               <p className="text-sm text-muted-foreground">Make your first investment to see your allocation breakdown.</p>
             </div>
@@ -285,7 +351,7 @@ function Index() {
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
-                      data={allocation}
+                      data={holdings}
                       dataKey="value"
                       nameKey="name"
                       innerRadius={50}
@@ -293,7 +359,7 @@ function Index() {
                       paddingAngle={2}
                       onClick={(d: any) => setActiveSlice(activeSlice === d.name ? null : d.name)}
                     >
-                      {allocation.map((a, i) => (
+                      {holdings.map((a, i) => (
                         <Cell
                           key={a.name}
                           fill={PIE_COLORS[i % PIE_COLORS.length]}
@@ -315,8 +381,40 @@ function Index() {
                   </PieChart>
                 </ResponsiveContainer>
               </div>
-              <ul className="mt-2 space-y-2">
-                {allocation.map((a, i) => {
+
+              {activeHolding && (
+                <div className="mt-2 rounded-2xl border border-primary/30 bg-primary/5 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-semibold truncate">{activeHolding.name}</p>
+                      <p className="text-xs text-muted-foreground">{activeHolding.category}</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-sm font-bold">R{Math.round(activeHolding.value).toLocaleString()}</p>
+                      <p className="text-[10px] text-muted-foreground">{((activeHolding.value / allocTotal) * 100).toFixed(1)}% of portfolio</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 mt-3 text-xs">
+                    <div className="rounded-xl bg-background/40 px-3 py-2">
+                      <p className="text-muted-foreground">Total shares</p>
+                      <p className="font-semibold mt-0.5">{activeHolding.units.toFixed(4)}</p>
+                    </div>
+                    <div className="rounded-xl bg-background/40 px-3 py-2">
+                      <p className="text-muted-foreground">Invested</p>
+                      <p className="font-semibold mt-0.5">R{Math.round(activeHolding.invested).toLocaleString()}</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => openWithdrawForName(activeHolding.name)}
+                    className="mt-3 w-full inline-flex items-center justify-center gap-2 rounded-full bg-primary text-primary-foreground hover:opacity-90 transition text-sm font-semibold py-2.5"
+                  >
+                    <ArrowDownToLine className="size-4" /> Withdraw from {activeHolding.name}
+                  </button>
+                </div>
+              )}
+
+              <ul className="mt-3 space-y-2">
+                {holdings.map((a, i) => {
                   const pct = (a.value / allocTotal) * 100;
                   const isActive = activeSlice === a.name;
                   return (
@@ -378,7 +476,7 @@ function Index() {
 
           {loadingP ? (
             <div className="bg-card rounded-2xl p-6 text-center text-sm text-muted-foreground">Loading…</div>
-          ) : activeBuys.length === 0 ? (
+          ) : holdings.length === 0 ? (
             <Link to="/invest" className="block bg-card rounded-2xl p-6 text-center border border-dashed border-border hover:border-primary transition">
               <Wallet className="size-6 text-primary mx-auto mb-2" />
               <p className="font-semibold">No active investments</p>
@@ -386,36 +484,35 @@ function Index() {
             </Link>
           ) : (
             <div className="space-y-3">
-              {activeBuys.map((p) => {
-                const projected = Number(p.amount) * (1 + Number(p.instruments?.expected_return ?? 0) / 100);
-                const pl = projected - Number(p.amount);
-                const positive = pl >= 0;
+              {holdings.map((h) => {
+                const projected = h.value;
+                const pl = projected - h.invested;
+                const isPositive = pl >= 0;
                 return (
-                  <div key={p.id} className="bg-card rounded-2xl p-5">
+                  <div key={h.instrument_id} className="bg-card rounded-2xl p-5">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="font-semibold">{p.instruments?.name ?? "Investment"}</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">{p.instruments?.category}</p>
+                        <p className="font-semibold">{h.name}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">{h.category}</p>
                       </div>
-                      <p className="text-xs text-muted-foreground">{new Date(p.created_at).toLocaleDateString()}</p>
                     </div>
                     <div className="grid grid-cols-2 mt-4">
                       <div>
                         <p className="text-xs text-muted-foreground">Invested</p>
-                        <p className="font-bold mt-1">R{Number(p.amount).toLocaleString()}</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">{Number(p.units).toFixed(4)} shares</p>
+                        <p className="font-bold mt-1">R{Math.round(h.invested).toLocaleString()}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">{h.units.toFixed(4)} shares</p>
                       </div>
                       <div className="text-right">
                         <p className="text-xs text-muted-foreground">Projected P&amp;L</p>
                         <p className="font-bold mt-1">
-                          <span className={cn(positive ? "text-primary" : "text-destructive")}>
-                            {positive ? "+" : ""}R{Math.round(pl).toLocaleString()}
+                          <span className={cn(isPositive ? "text-primary" : "text-destructive")}>
+                            {isPositive ? "+" : ""}R{Math.round(pl).toLocaleString()}
                           </span>
                         </p>
                       </div>
                     </div>
                     <button
-                      onClick={() => setWithdrawTarget(p)}
+                      onClick={() => openWithdrawForHolding(h)}
                       className="mt-4 w-full inline-flex items-center justify-center gap-2 rounded-full bg-secondary hover:bg-muted transition text-sm font-semibold py-2.5"
                     >
                       <ArrowDownToLine className="size-4" /> Withdraw
@@ -428,34 +525,30 @@ function Index() {
         </section>
 
         {/* Transaction history */}
-        {!loadingP && purchases.length > 0 && (
+        {!loadingP && history.length > 0 && (
           <section className="bg-card rounded-3xl p-5">
             <div className="flex items-center gap-2 mb-3">
               <History className="size-4 text-primary" />
               <h3 className="font-semibold">Transaction history</h3>
             </div>
             <ul className="divide-y divide-border/60">
-              {purchases.map((p) => {
-                const isWithdrawal = p.status === "withdrawn";
-                const amt = Number(p.amount);
-                return (
-                  <li key={p.id} className="flex items-center justify-between py-2.5">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium truncate">
-                        {isWithdrawal ? "Withdrawal" : "Invest"} · {p.instruments?.name ?? "—"}
-                      </p>
-                      <p className="text-[11px] text-muted-foreground">
-                        {new Date(p.created_at).toLocaleString()}
-                      </p>
-                    </div>
-                    <p className={cn("text-sm font-semibold shrink-0 ml-3", isWithdrawal ? "text-destructive" : "text-primary")}>
-                      {isWithdrawal ? "−" : "+"}R{Math.abs(amt).toLocaleString()}
+              {history.map((r) => (
+                <li key={r.id} className="flex items-center justify-between py-2.5">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate">
+                      {r.type === "withdraw" ? "Withdrawal" : "Invest"} · {r.name}
                     </p>
-                  </li>
-                );
-              })}
+                    <p className="text-[11px] text-muted-foreground">
+                      {new Date(r.created_at).toLocaleString()}
+                    </p>
+                  </div>
+                  <p className={cn("text-sm font-semibold shrink-0 ml-3", r.type === "withdraw" ? "text-destructive" : "text-primary")}>
+                    {r.type === "withdraw" ? "−" : "+"}R{Math.abs(r.amount).toLocaleString()}
+                  </p>
+                </li>
+              ))}
             </ul>
-            {withdrawalRows.length > 0 && (
+            {withdrawals.length > 0 && (
               <p className="mt-3 text-[11px] text-muted-foreground">
                 Withdrawn funds are simulated — they reduce your balance but no payout is sent.
               </p>
@@ -464,28 +557,50 @@ function Index() {
         )}
       </div>
 
-      <Dialog open={!!withdrawTarget} onOpenChange={(o) => !o && setWithdrawTarget(null)}>
+      <Dialog open={!!withdrawHolding} onOpenChange={(o) => !o && setWithdrawHolding(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Withdraw investment</DialogTitle>
+            <DialogTitle>Withdraw from {withdrawHolding?.name}</DialogTitle>
             <DialogDescription>
-              You're about to withdraw your full position in{" "}
-              <span className="font-semibold text-foreground">{withdrawTarget?.instruments?.name ?? "this investment"}</span>.
-              The amount will be removed from your portfolio.
+              Enter how much you'd like to withdraw. You can take out part of your position or cash out fully.
             </DialogDescription>
           </DialogHeader>
-          <div className="rounded-2xl bg-secondary/40 p-4 my-2">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">Withdrawal amount</span>
-              <span className="text-lg font-bold">R{Number(withdrawTarget?.amount ?? 0).toLocaleString()}</span>
+          <div className="rounded-2xl bg-secondary/40 p-4 my-2 space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">Available to withdraw</span>
+              <span className="font-semibold">R{Number(withdrawHolding?.invested ?? 0).toFixed(2)}</span>
             </div>
-            <div className="flex items-center justify-between mt-1">
-              <span className="text-xs text-muted-foreground">Shares released</span>
-              <span className="text-xs">{Number(withdrawTarget?.units ?? 0).toFixed(4)}</span>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">Total shares held</span>
+              <span>{Number(withdrawHolding?.units ?? 0).toFixed(4)}</span>
             </div>
           </div>
+          <div>
+            <label className="text-xs text-muted-foreground">Amount (R)</label>
+            <div className="flex gap-2 mt-1">
+              <Input
+                type="number"
+                inputMode="decimal"
+                value={withdrawAmount}
+                onChange={(e) => setWithdrawAmount(e.target.value)}
+                placeholder="0.00"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => withdrawHolding && setWithdrawAmount(withdrawHolding.invested.toFixed(2))}
+              >
+                Max
+              </Button>
+            </div>
+            {withdrawHolding && Number(withdrawAmount) > 0 && (
+              <p className="text-[11px] text-muted-foreground mt-2">
+                Releases ~{(withdrawHolding.units * (Number(withdrawAmount) / withdrawHolding.invested || 0)).toFixed(4)} shares
+              </p>
+            )}
+          </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setWithdrawTarget(null)} disabled={withdrawing}>
+            <Button variant="ghost" onClick={() => setWithdrawHolding(null)} disabled={withdrawing}>
               Cancel
             </Button>
             <Button onClick={confirmWithdraw} disabled={withdrawing}>
