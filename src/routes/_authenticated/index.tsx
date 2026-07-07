@@ -614,54 +614,89 @@ function Index() {
 }
 
 function AIChat() {
-  const [msgs, setMsgs] = useState<{ role: "user" | "ai"; text: string }[]>([]);
+  const askTutor = useServerFn(askTutorFn);
+  const [msgs, setMsgs] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
   const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const send = () => {
-    const q = input.trim();
-    if (!q) return;
-    setMsgs((m) => [...m, { role: "user", text: q }]);
+  const suggestions = [
+    "What is fractional trading?",
+    "How much have I invested?",
+    "What is my best performing investment?",
+    "How much do I need to start?",
+  ];
+
+  const send = async (text?: string) => {
+    const q = (text ?? input).trim();
+    if (!q || loading) return;
+    const next = [...msgs, { role: "user" as const, content: q }];
+    setMsgs(next);
     setInput("");
-    setTimeout(() => {
-      setMsgs((m) => [...m, { role: "ai", text: respond(q) }]);
-    }, 400);
+    setLoading(true);
+    try {
+      const res = await askTutor({ data: { messages: next.slice(-10) } });
+      setMsgs((m) => [...m, { role: "assistant", content: res.message || "I couldn't answer that — try rephrasing." }]);
+    } catch (e: any) {
+      setMsgs((m) => [...m, { role: "assistant", content: e?.message ?? "Something went wrong. Please try again." }]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <div className="mt-4 rounded-2xl border border-border bg-background/40 p-3">
       <div className="flex items-center gap-2 px-1 pb-2">
         <Bot className="size-4 text-primary" />
-        <p className="text-xs text-muted-foreground">Ask about your portfolio</p>
+        <p className="text-xs text-muted-foreground">Ask your SmartInVest tutor — learn investing or ask about your portfolio</p>
       </div>
-      {msgs.length > 0 && (
-        <div className="space-y-2 mb-3 max-h-56 overflow-auto pr-1">
-          {msgs.map((m, i) => (
-            <div key={i} className={cn("text-sm rounded-xl px-3 py-2", m.role === "user" ? "bg-secondary ml-6" : "bg-primary/10 mr-6 text-foreground")}>
-              {m.text}
-            </div>
+
+      {msgs.length === 0 && (
+        <div className="flex flex-wrap gap-1.5 mb-3">
+          {suggestions.map((s) => (
+            <button
+              key={s}
+              onClick={() => send(s)}
+              className="text-[11px] px-2.5 py-1 rounded-full bg-secondary hover:bg-muted transition text-foreground/80"
+            >
+              {s}
+            </button>
           ))}
         </div>
       )}
+
+      {msgs.length > 0 && (
+        <div className="space-y-2 mb-3 max-h-64 overflow-auto pr-1">
+          {msgs.map((m, i) => (
+            <div key={i} className={cn("text-sm rounded-xl px-3 py-2 leading-relaxed", m.role === "user" ? "bg-secondary ml-6" : "bg-primary/10 mr-6 text-foreground")}>
+              {m.content}
+            </div>
+          ))}
+          {loading && (
+            <div className="text-sm rounded-xl px-3 py-2 bg-primary/10 mr-6 text-muted-foreground animate-pulse">
+              Thinking…
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="flex items-center gap-2">
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && send()}
-          placeholder="e.g. Should I rebalance crypto?"
-          className="flex-1 bg-transparent border border-border rounded-full px-4 py-2 text-sm outline-none focus:border-primary"
+          disabled={loading}
+          placeholder="Ask anything about investing…"
+          className="flex-1 bg-transparent border border-border rounded-full px-4 py-2 text-sm outline-none focus:border-primary disabled:opacity-60"
         />
-        <button onClick={send} className="size-9 rounded-full bg-primary text-primary-foreground grid place-items-center hover:opacity-90 transition" aria-label="Send">
+        <button
+          onClick={() => send()}
+          disabled={loading || !input.trim()}
+          className="size-9 rounded-full bg-primary text-primary-foreground grid place-items-center hover:opacity-90 transition disabled:opacity-50"
+          aria-label="Send"
+        >
           <Send className="size-4" />
         </button>
       </div>
     </div>
   );
-}
-
-function respond(q: string): string {
-  const s = q.toLowerCase();
-  if (s.includes("crypto")) return "Crypto is +65% (R6.5k). Trimming ~20% would lock in gains and bring allocation back near your 10% target.";
-  if (s.includes("risk")) return "Portfolio risk is moderate-high. Crypto and Equities drive 78% of volatility. Diversifying into ETFs would lower drawdown.";
-  if (s.includes("buy") || s.includes("invest")) return "Based on momentum and your gaps, broad-market ETFs (e.g. Top 40) look attractive for new contributions.";
-  return "Your portfolio is +65% YTD. Strongest: Crypto. Weakest: Unit Trusts. Want a rebalancing plan?";
 }
