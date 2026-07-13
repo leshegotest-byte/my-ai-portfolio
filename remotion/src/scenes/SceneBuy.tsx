@@ -37,7 +37,7 @@ export const SceneBuy: React.FC = () => {
           </div>
 
           <div style={{ marginTop: 20, background: `${theme.primary}15`, border: `1px solid ${theme.primary}55`, borderRadius: 999, padding: "8px 14px", fontSize: 11, color: theme.primary, textAlign: "center" }}>
-            ✨ Fractional shares — invest from R50
+            Fractional shares — invest from R50
           </div>
 
           <div style={{ marginTop: 18, background: theme.bg, borderRadius: 999, padding: 4, display: "flex" }}>

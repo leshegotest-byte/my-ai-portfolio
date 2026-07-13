@@ -59,7 +59,7 @@ export const ScenePortfolio: React.FC = () => {
 
       <div style={{ flex: 1, background: theme.card, border: `1px solid ${theme.border}`, borderRadius: 32, padding: 28, height: 640, display: "flex", flexDirection: "column" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 12, background: `${theme.primary}22`, display: "grid", placeItems: "center", color: theme.primary, fontWeight: 700 }}>✨</div>
+          <div style={{ width: 36, height: 36, borderRadius: 12, background: `${theme.primary}22`, display: "grid", placeItems: "center", color: theme.primary, fontWeight: 700 }}>AI</div>
           <div style={{ fontFamily: "Space Grotesk", fontSize: 22, fontWeight: 700 }}>AI Tutor</div>
         </div>
         <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 12, overflow: "hidden" }}>
