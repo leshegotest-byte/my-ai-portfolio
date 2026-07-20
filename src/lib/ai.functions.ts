@@ -2,33 +2,41 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
-const LOVABLE_AI_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
+const GEMINI_MODEL = "gemini-2.5-flash";
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
-async function callLovableAI(prompt: string, system: string): Promise<string> {
-  const apiKey = process.env.LOVABLE_API_KEY;
-  if (!apiKey) throw new Error("LOVABLE_API_KEY is not configured");
+type ChatMsg = { role: "user" | "assistant"; content: string };
 
-  const res = await fetch(LOVABLE_AI_URL, {
+async function callGemini(system: string, messages: ChatMsg[]): Promise<string> {
+  const apiKey = process.env.GOOGLE_API_KEY;
+  if (!apiKey) throw new Error("GOOGLE_API_KEY is not configured");
+
+  const contents = messages.map((m) => ({
+    role: m.role === "assistant" ? "model" : "user",
+    parts: [{ text: m.content }],
+  }));
+
+  const res = await fetch(`${GEMINI_URL}?key=${apiKey}`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: prompt },
-      ],
+      systemInstruction: { parts: [{ text: system }] },
+      contents,
     }),
   });
 
   if (res.status === 429) throw new Error("AI is rate-limited, please try again in a moment.");
-  if (res.status === 402) throw new Error("AI credits exhausted — please top up.");
-  if (!res.ok) throw new Error(`AI request failed (${res.status})`);
-
+  if (!res.ok) {
+    const t = await res.text().catch(() => "");
+    throw new Error(`AI request failed (${res.status}) ${t.slice(0, 200)}`);
+  }
   const data = await res.json();
-  return data.choices?.[0]?.message?.content?.trim() ?? "";
+  const text = data?.candidates?.[0]?.content?.parts?.map((p: any) => p.text).join("").trim();
+  return text ?? "";
+}
+
+async function callGeminiSingle(prompt: string, system: string): Promise<string> {
+  return callGemini(system, [{ role: "user", content: prompt }]);
 }
 
 const suitabilityInput = z.object({
@@ -59,7 +67,7 @@ export const getSuitability = createServerFn({ method: "POST" })
     const prompt = `Investor profile: ${data.preferences.risk_appetite} risk, ${data.preferences.investment_goal} goal, ${data.preferences.investment_type} horizon, R${data.preferences.investment_amount} amount, ${data.preferences.liquidity} liquidity.
 Instrument: ${data.instrument.name} (${data.instrument.category}, ${data.instrument.sector}), risk ${data.instrument.risk_level}, expected return ${data.instrument.expected_return}%, dividend ${data.instrument.dividend_yield}%, volatility ${data.instrument.volatility}.
 Write a brief suitability message (2 sentences) explaining how well this instrument aligns with the profile.`;
-    const message = await callLovableAI(prompt, sys);
+    const message = await callGeminiSingle(prompt, sys);
     return { message };
   });
 
@@ -88,7 +96,7 @@ export const getPortfolioInsights = createServerFn({ method: "POST" })
     const prompt = `Investor: ${data.preferences.risk_appetite} risk, ${data.preferences.investment_goal} goal, ${data.preferences.investment_type} horizon, ${data.preferences.liquidity} liquidity.
 Current allocation: ${allocText}.
 Generate 3 personalized insights (rebalance, opportunity, or risk warning) as JSON only.`;
-    const raw = await callLovableAI(prompt, sys);
+    const raw = await callGeminiSingle(prompt, sys);
     try {
       // Strip code fences if present
       const cleaned = raw.replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
@@ -215,22 +223,6 @@ Rules:
 
 ${summary}`;
 
-    const apiKey = process.env.LOVABLE_API_KEY;
-    if (!apiKey) throw new Error("LOVABLE_API_KEY is not configured");
-
-    const res = await fetch(LOVABLE_AI_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [{ role: "system", content: system }, ...data.messages],
-      }),
-    });
-
-    if (res.status === 429) throw new Error("AI is busy right now — please try again in a moment.");
-    if (res.status === 402) throw new Error("AI credits exhausted — please top up.");
-    if (!res.ok) throw new Error(`AI request failed (${res.status})`);
-    const json = await res.json();
-    const message = json.choices?.[0]?.message?.content?.trim() ?? "";
+    const message = await callGemini(system, data.messages);
     return { message };
   });
