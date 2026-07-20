@@ -2,33 +2,41 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
-const LOVABLE_AI_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
+const GEMINI_MODEL = "gemini-2.5-flash";
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
-async function callLovableAI(prompt: string, system: string): Promise<string> {
-  const apiKey = process.env.LOVABLE_API_KEY;
-  if (!apiKey) throw new Error("LOVABLE_API_KEY is not configured");
+type ChatMsg = { role: "user" | "assistant"; content: string };
 
-  const res = await fetch(LOVABLE_AI_URL, {
+async function callGemini(system: string, messages: ChatMsg[]): Promise<string> {
+  const apiKey = process.env.GOOGLE_API_KEY;
+  if (!apiKey) throw new Error("GOOGLE_API_KEY is not configured");
+
+  const contents = messages.map((m) => ({
+    role: m.role === "assistant" ? "model" : "user",
+    parts: [{ text: m.content }],
+  }));
+
+  const res = await fetch(`${GEMINI_URL}?key=${apiKey}`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: prompt },
-      ],
+      systemInstruction: { parts: [{ text: system }] },
+      contents,
     }),
   });
 
   if (res.status === 429) throw new Error("AI is rate-limited, please try again in a moment.");
-  if (res.status === 402) throw new Error("AI credits exhausted — please top up.");
-  if (!res.ok) throw new Error(`AI request failed (${res.status})`);
-
+  if (!res.ok) {
+    const t = await res.text().catch(() => "");
+    throw new Error(`AI request failed (${res.status}) ${t.slice(0, 200)}`);
+  }
   const data = await res.json();
-  return data.choices?.[0]?.message?.content?.trim() ?? "";
+  const text = data?.candidates?.[0]?.content?.parts?.map((p: any) => p.text).join("").trim();
+  return text ?? "";
+}
+
+async function callGeminiSingle(prompt: string, system: string): Promise<string> {
+  return callGemini(system, [{ role: "user", content: prompt }]);
 }
 
 const suitabilityInput = z.object({
