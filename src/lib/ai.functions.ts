@@ -67,7 +67,7 @@ export const getSuitability = createServerFn({ method: "POST" })
     const prompt = `Investor profile: ${data.preferences.risk_appetite} risk, ${data.preferences.investment_goal} goal, ${data.preferences.investment_type} horizon, R${data.preferences.investment_amount} amount, ${data.preferences.liquidity} liquidity.
 Instrument: ${data.instrument.name} (${data.instrument.category}, ${data.instrument.sector}), risk ${data.instrument.risk_level}, expected return ${data.instrument.expected_return}%, dividend ${data.instrument.dividend_yield}%, volatility ${data.instrument.volatility}.
 Write a brief suitability message (2 sentences) explaining how well this instrument aligns with the profile.`;
-    const message = await callLovableAI(prompt, sys);
+    const message = await callGeminiSingle(prompt, sys);
     return { message };
   });
 
@@ -96,7 +96,7 @@ export const getPortfolioInsights = createServerFn({ method: "POST" })
     const prompt = `Investor: ${data.preferences.risk_appetite} risk, ${data.preferences.investment_goal} goal, ${data.preferences.investment_type} horizon, ${data.preferences.liquidity} liquidity.
 Current allocation: ${allocText}.
 Generate 3 personalized insights (rebalance, opportunity, or risk warning) as JSON only.`;
-    const raw = await callLovableAI(prompt, sys);
+    const raw = await callGeminiSingle(prompt, sys);
     try {
       // Strip code fences if present
       const cleaned = raw.replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
