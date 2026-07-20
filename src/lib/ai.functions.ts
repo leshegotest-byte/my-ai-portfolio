@@ -223,22 +223,6 @@ Rules:
 
 ${summary}`;
 
-    const apiKey = process.env.LOVABLE_API_KEY;
-    if (!apiKey) throw new Error("LOVABLE_API_KEY is not configured");
-
-    const res = await fetch(LOVABLE_AI_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [{ role: "system", content: system }, ...data.messages],
-      }),
-    });
-
-    if (res.status === 429) throw new Error("AI is busy right now — please try again in a moment.");
-    if (res.status === 402) throw new Error("AI credits exhausted — please top up.");
-    if (!res.ok) throw new Error(`AI request failed (${res.status})`);
-    const json = await res.json();
-    const message = json.choices?.[0]?.message?.content?.trim() ?? "";
+    const message = await callGemini(system, data.messages);
     return { message };
   });
